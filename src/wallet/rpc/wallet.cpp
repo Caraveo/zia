@@ -1023,6 +1023,65 @@ RPCHelpMan abandontransaction();
 RPCHelpMan rescanblockchain();
 RPCHelpMan abortrescan();
 
+static UniValue createrecord(const JSONRPCRequest& request)
+{
+    if (request.params.size() != 1)
+        throw std::runtime_error(
+            "createrecord <passphrase>\n"
+            "Create a new wallet with a mnemonic phrase and seed derived from the passphrase.");
+
+    const std::string passphrase = request.params[0].get_str();
+    
+    // Generate mnemonic and seed
+    std::string mnemonic = wallet::GenerateMnemonic(128); // Using 128 bits for simplicity
+    std::vector<unsigned char> seed = wallet::MnemonicToSeed(mnemonic, passphrase);
+
+    // Create a new wallet
+    WalletContext& context = EnsureWalletContext(request.context);
+    std::string wallet_name = "wallet_" + std::to_string(GetTime());
+    
+    DatabaseOptions options;
+    DatabaseStatus status;
+    ReadDatabaseArgs(*context.args, options);
+    options.require_create = true;
+    options.create_flags = WALLET_FLAG_DESCRIPTORS;
+    options.create_passphrase = passphrase;
+    
+    bilingual_str error;
+    std::vector<bilingual_str> warnings;
+    const std::shared_ptr<CWallet> wallet = CreateWallet(context, wallet_name, std::nullopt, options, status, error, warnings);
+    
+    if (!wallet) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Failed to create wallet: " + error.original);
+    }
+
+    // Get a new address
+    LOCK(wallet->cs_wallet);
+    CTxDestination dest;
+    bilingual_str error_msg;
+    if (!wallet->GetNewDestination(OutputType::BECH32, "", dest, error_msg)) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Failed to generate address: " + error_msg.original);
+    }
+
+    // Return all the information
+    UniValue out(UniValue::VOBJ);
+    out.pushKV("wallet_name", wallet_name);
+    out.pushKV("address", EncodeDestination(dest));
+    out.pushKV("mnemonic", mnemonic);
+    out.pushKV("seed", HexStr(seed));
+    out.pushKV("passphrase", passphrase);
+    
+    if (!warnings.empty()) {
+        UniValue warnings_json(UniValue::VARR);
+        for (const auto& warning : warnings) {
+            warnings_json.push_back(warning.original);
+        }
+        out.pushKV("warnings", warnings_json);
+    }
+
+    return out;
+}
+
 std::span<const CRPCCommand> GetWalletRPCCommands()
 {
     static const CRPCCommand commands[]{
@@ -1081,6 +1140,7 @@ std::span<const CRPCCommand> GetWalletRPCCommands()
         {"wallet", &upgradewallet},
         {"wallet", &walletcreatefundedpsbt},
         {"wallet", "createphrase", [](const JSONRPCRequest& request, UniValue& result, bool) { result = createphrase(request); return true; }, {{"entropy_bits", false}, {"passphrase", true}}, 0},
+        {"wallet", "createrecord", [](const JSONRPCRequest& request, UniValue& result, bool) { result = createrecord(request); return true; }, {{"passphrase", false}}, 0},
 #ifdef ENABLE_EXTERNAL_SIGNER
         {"wallet", &walletdisplayaddress},
 #endif // ENABLE_EXTERNAL_SIGNER
