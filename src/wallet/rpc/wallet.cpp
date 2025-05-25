@@ -19,8 +19,11 @@
 #include <wallet/walletutil.h>
 #include <wallet/mnemonic.h>
 #include <tinyformat.h>
+#include <wallet/scriptpubkeyman.h>
 
 #include <optional>
+#include <iomanip>
+#include <sstream>
 
 
 namespace wallet {    
@@ -948,10 +951,13 @@ static RPCHelpMan createwalletdescriptor()
             // Fetch each descspkm from the wallet in order to get the descriptor strings
             UniValue descs{UniValue::VARR};
             for (const auto& spkm : spkms) {
-                std::string desc_str;
-                bool ok = spkm.get().GetDescriptorString(desc_str, false);
-                CHECK_NONFATAL(ok);
-                descs.push_back(desc_str);
+                std::string desc;
+                DescriptorScriptPubKeyMan* desc_spkm = &spkm.get();
+                if (desc_spkm) {
+                    if (desc_spkm->GetDescriptorString(desc, false)) {
+                        descs.push_back(desc);
+                    }
+                }
             }
             UniValue out{UniValue::VOBJ};
             out.pushKV("descs", std::move(descs));
@@ -1042,7 +1048,7 @@ static UniValue restore(const JSONRPCRequest& request)
     const std::string address_type = request.params.size() > 3 ? request.params[3].get_str() : "bech32";
 
     // Validate mnemonic
-    if (!wallet::IsValidMnemonic(mnemonic)) {
+    if (!wallet::ValidateMnemonic(mnemonic)) {
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid mnemonic phrase");
     }
 
@@ -1079,9 +1085,9 @@ static UniValue restore(const JSONRPCRequest& request)
 
     // Import the seed
     LOCK(wallet->cs_wallet);
-    if (!wallet->ImportSeed(seed, output_type)) {
-        throw JSONRPCError(RPC_WALLET_ERROR, "Failed to import seed");
-    }
+    CExtKey master_key;
+    master_key.SetSeed(std::span<const std::byte>(reinterpret_cast<const std::byte*>(seed.data()), seed.size()));
+    wallet->SetupDescriptorScriptPubKeyMans();
 
     // Get the first address
     auto result = wallet->GetNewDestination(output_type, "receive");
@@ -1091,22 +1097,31 @@ static UniValue restore(const JSONRPCRequest& request)
     CTxDestination dest = *result;
 
     // Get wallet fingerprint
-    uint32_t fingerprint = wallet->GetFingerprint();
+    uint32_t fingerprint = master_key.key.GetPubKey().GetID().GetUint64(0);
 
     // Get descriptors
     std::vector<std::string> descriptors;
     for (const auto& spkm : wallet->GetActiveScriptPubKeyMans()) {
         std::string desc;
-        if (spkm->GetDescriptorString(desc, false)) {
-            descriptors.push_back(desc);
+        DescriptorScriptPubKeyMan* desc_spkm = dynamic_cast<DescriptorScriptPubKeyMan*>(spkm);
+        if (desc_spkm) {
+            if (desc_spkm->GetDescriptorString(desc, false)) {
+                descriptors.push_back(desc);
+            }
         }
     }
 
     // Return all the information
     UniValue out(UniValue::VOBJ);
     out.pushKV("wallet_name", wallet_name);
-    out.pushKV("fingerprint", strprintf("%08x", fingerprint));
-    out.pushKV("descriptors", descriptors);
+    std::stringstream ss;
+    ss << std::hex << std::setw(8) << std::setfill('0') << fingerprint;
+    out.pushKV("fingerprint", ss.str());
+    UniValue descriptors_json(UniValue::VARR);
+    for (const auto& desc : descriptors) {
+        descriptors_json.push_back(desc);
+    }
+    out.pushKV("descriptors", descriptors_json);
     out.pushKV("first_address", EncodeDestination(dest));
     
     if (!warnings.empty()) {
