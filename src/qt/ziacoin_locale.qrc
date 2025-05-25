@@ -1,0 +1,5 @@
+<RCC>
+  <qresource prefix="/">
+    <!-- Empty resource file for minimal build -->
+  </qresource>
+</RCC>
