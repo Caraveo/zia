@@ -1,6 +1,6 @@
 # ZiaCoin Network
 
-ZiaCoin is a modern cryptocurrency implementation focused on security, privacy, and user-friendly features. Built on the foundations of Bitcoin Core, ZiaCoin adds enhanced functionality while maintaining the robust security model of its predecessor.
+ZiaCoin is a modern cryptocurrency implementation focused on security, privacy, and user-friendly features. Built on the foundations of ZiaCoin Core, ZiaCoin adds enhanced functionality while maintaining the robust security model of its predecessor.
 
 ## Features
 
@@ -92,6 +92,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Acknowledgments
 
-- Based on Bitcoin Core
+- Based on ZiaCoin Core
 - Uses BIP32/39/44 for HD wallet implementation
-- Implements BIP174 for Partially Signed Bitcoin Transactions (PSBT)
+- Implements BIP174 for Partially Signed ZiaCoin Transactions (PSBT)
