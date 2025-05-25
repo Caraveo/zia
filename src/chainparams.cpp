@@ -115,29 +115,33 @@ const CChainParams &Params() {
 
 std::unique_ptr<const CChainParams> CreateChainParams(const ArgsManager& args, const ChainType chain)
 {
-    switch (chain) {
-    case ChainType::MAIN:
-        return CChainParams::Main();
-    case ChainType::TESTNET:
-        return CChainParams::TestNet();
-    case ChainType::TESTNET4:
-        return CChainParams::TestNet4();
-    case ChainType::SIGNET: {
-        auto opts = CChainParams::SigNetOptions{};
-        ReadSigNetArgs(args, opts);
-        return CChainParams::SigNet(opts);
-    }
-    case ChainType::REGTEST: {
-        auto opts = CChainParams::RegTestOptions{};
-        ReadRegTestArgs(args, opts);
-        return CChainParams::RegTest(opts);
-    }
-    }
-    assert(false);
+    // Always use mainnet regardless of chain type
+    return CChainParams::Main();
 }
 
 void SelectParams(const ChainType chain)
 {
-    SelectBaseParams(chain);
-    globalChainParams = CreateChainParams(gArgs, chain);
+    // Always select mainnet base params
+    SelectBaseParams(ChainType::MAIN);
+    globalChainParams = CreateChainParams(gArgs, ChainType::MAIN);
+}
+
+std::unique_ptr<const CChainParams> CChainParams::TestNet() {
+    throw std::runtime_error("TestNet not supported in ZiaCoin.");
+}
+
+std::unique_ptr<const CChainParams> CChainParams::RegTest(const RegTestOptions&) {
+    throw std::runtime_error("RegTest not supported in ZiaCoin.");
+}
+
+std::unique_ptr<const CChainParams> CChainParams::SigNet(const SigNetOptions&) {
+    throw std::runtime_error("SigNet not supported in ZiaCoin.");
+}
+
+std::unique_ptr<const CChainParams> CChainParams::TestNet4() {
+    throw std::runtime_error("TestNet4 not supported in ZiaCoin.");
+}
+
+std::vector<int> CChainParams::GetAvailableSnapshotHeights() const {
+    return {}; // empty, no snapshots
 }
