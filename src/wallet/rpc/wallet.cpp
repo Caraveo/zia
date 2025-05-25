@@ -1023,6 +1023,103 @@ RPCHelpMan abandontransaction();
 RPCHelpMan rescanblockchain();
 RPCHelpMan abortrescan();
 
+static UniValue restore(const JSONRPCRequest& request)
+{
+    if (request.params.size() < 2 || request.params.size() > 4)
+        throw std::runtime_error(
+            "restore <wallet_name> <mnemonic> [passphrase] [address_type]\n"
+            "Restores a new wallet from a BIP39 mnemonic phrase and optional passphrase.\n"
+            "Initializes descriptor(s), derives keys, and imports into the wallet.\n"
+            "\nParameters:\n"
+            "1. wallet_name   (string, required) The name for the wallet to create\n"
+            "2. mnemonic      (string, required) The 12–24 word BIP39 phrase\n"
+            "3. passphrase    (string, optional) Optional mnemonic passphrase\n"
+            "4. address_type  (string, optional) One of: \"bech32\", \"p2sh-segwit\", or \"legacy\" (default: \"bech32\")");
+
+    const std::string wallet_name = request.params[0].get_str();
+    const std::string mnemonic = request.params[1].get_str();
+    const std::string passphrase = request.params.size() > 2 ? request.params[2].get_str() : "";
+    const std::string address_type = request.params.size() > 3 ? request.params[3].get_str() : "bech32";
+
+    // Validate mnemonic
+    if (!wallet::IsValidMnemonic(mnemonic)) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid mnemonic phrase");
+    }
+
+    // Convert mnemonic to seed
+    std::vector<unsigned char> seed = wallet::MnemonicToSeed(mnemonic, passphrase);
+
+    // Create wallet
+    WalletContext& context = EnsureWalletContext(request.context);
+    DatabaseOptions options;
+    DatabaseStatus status;
+    ReadDatabaseArgs(*context.args, options);
+    options.require_create = true;
+    options.create_flags = WALLET_FLAG_DESCRIPTORS;
+    
+    bilingual_str error;
+    std::vector<bilingual_str> warnings;
+    const std::shared_ptr<CWallet> wallet = CreateWallet(context, wallet_name, std::nullopt, options, status, error, warnings);
+    
+    if (!wallet) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Failed to create wallet: " + error.original);
+    }
+
+    // Determine output type
+    OutputType output_type;
+    if (address_type == "bech32") {
+        output_type = OutputType::BECH32;
+    } else if (address_type == "p2sh-segwit") {
+        output_type = OutputType::P2SH_SEGWIT;
+    } else if (address_type == "legacy") {
+        output_type = OutputType::LEGACY;
+    } else {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid address type. Must be one of: bech32, p2sh-segwit, legacy");
+    }
+
+    // Import the seed
+    LOCK(wallet->cs_wallet);
+    if (!wallet->ImportSeed(seed, output_type)) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Failed to import seed");
+    }
+
+    // Get the first address
+    auto result = wallet->GetNewDestination(output_type, "receive");
+    if (!result) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Failed to generate address");
+    }
+    CTxDestination dest = *result;
+
+    // Get wallet fingerprint
+    uint32_t fingerprint = wallet->GetFingerprint();
+
+    // Get descriptors
+    std::vector<std::string> descriptors;
+    for (const auto& spkm : wallet->GetActiveScriptPubKeyMans()) {
+        std::string desc;
+        if (spkm->GetDescriptorString(desc, false)) {
+            descriptors.push_back(desc);
+        }
+    }
+
+    // Return all the information
+    UniValue out(UniValue::VOBJ);
+    out.pushKV("wallet_name", wallet_name);
+    out.pushKV("fingerprint", strprintf("%08x", fingerprint));
+    out.pushKV("descriptors", descriptors);
+    out.pushKV("first_address", EncodeDestination(dest));
+    
+    if (!warnings.empty()) {
+        UniValue warnings_json(UniValue::VARR);
+        for (const auto& warning : warnings) {
+            warnings_json.push_back(warning.original);
+        }
+        out.pushKV("warnings", warnings_json);
+    }
+
+    return out;
+}
+
 static UniValue createrecord(const JSONRPCRequest& request)
 {
     if (request.params.size() != 2)
@@ -1141,6 +1238,7 @@ std::span<const CRPCCommand> GetWalletRPCCommands()
         {"wallet", &walletcreatefundedpsbt},
         {"wallet", "createphrase", [](const JSONRPCRequest& request, UniValue& result, bool) { result = createphrase(request); return true; }, {{"entropy_bits", false}, {"passphrase", true}}, 0},
         {"wallet", "createrecord", [](const JSONRPCRequest& request, UniValue& result, bool) { result = createrecord(request); return true; }, {{"wallet_name", false}, {"passphrase", false}}, 0},
+        {"wallet", "restore", [](const JSONRPCRequest& request, UniValue& result, bool) { result = restore(request); return true; }, {{"wallet_name", false}, {"mnemonic", false}, {"passphrase", true}, {"address_type", true}}, 0},
 #ifdef ENABLE_EXTERNAL_SIGNER
         {"wallet", &walletdisplayaddress},
 #endif // ENABLE_EXTERNAL_SIGNER
