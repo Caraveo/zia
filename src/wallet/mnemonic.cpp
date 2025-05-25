@@ -2,15 +2,20 @@
 #include <random.h>
 #include <util/strencodings.h>
 #include <crypto/sha256.h>
-#include <crypto/sha512.h>
 #include <crypto/hmac_sha512.h>
+#include <span.h>
 #include <cstring>
 #include <algorithm>
 #include <sstream>
 #include <vector>
 #include <string>
 #include <fstream>
-#include <span>
+#include <stdexcept>
+
+extern "C" {
+#include <openssl/evp.h>
+#include <openssl/sha.h>
+}
 
 namespace wallet {
 
@@ -23,7 +28,6 @@ std::vector<std::string> LoadWordList() {
         std::stringstream ss(line);
         std::string word;
         while (std::getline(ss, word, ',')) {
-            // Remove quotes and trim whitespace
             word.erase(std::remove(word.begin(), word.end(), '"'), word.end());
             word.erase(0, word.find_first_not_of(" \t"));
             word.erase(word.find_last_not_of(" \t") + 1);
@@ -32,13 +36,36 @@ std::vector<std::string> LoadWordList() {
             }
         }
     }
+    if (words.size() != 2048) {
+        throw std::runtime_error("Wordlist must contain exactly 2048 words.");
+    }
     return words;
 }
 
-// Get wordlist (lazy loaded)
 const std::vector<std::string>& GetWordList() {
     static const std::vector<std::string> wordlist = LoadWordList();
     return wordlist;
+}
+
+// Convert bytes to bit vector
+std::vector<bool> BytesToBits(const std::vector<unsigned char>& bytes) {
+    std::vector<bool> bits;
+    for (unsigned char byte : bytes) {
+        for (int i = 7; i >= 0; --i) {
+            bits.push_back((byte >> i) & 1);
+        }
+    }
+    return bits;
+}
+
+// Convert bit vector to integer
+int BitsToInt(const std::vector<bool>& bits, size_t start, size_t length) {
+    int value = 0;
+    for (size_t i = 0; i < length; ++i) {
+        value <<= 1;
+        if (start + i < bits.size() && bits[start + i]) value |= 1;
+    }
+    return value;
 }
 
 std::string GenerateMnemonic(int entropy_size) {
@@ -47,30 +74,25 @@ std::string GenerateMnemonic(int entropy_size) {
     }
 
     std::vector<unsigned char> entropy(entropy_size / 8);
-    std::span<unsigned char> entropy_span(entropy.data(), entropy.size());
-    GetStrongRandBytes(entropy_span);
+    GetStrongRandBytes(std::span<unsigned char>(entropy));
 
     // Calculate checksum
     unsigned char hash[CSHA256::OUTPUT_SIZE];
-    CSHA256 sha256;
-    sha256.Write(entropy.data(), entropy.size()).Finalize(hash);
+    CSHA256().Write(entropy.data(), entropy.size()).Finalize(hash);
     int checksum_bits = entropy_size / 32;
-    unsigned char checksum = hash[0] >> (8 - checksum_bits);
 
-    // Combine entropy and checksum
-    std::vector<unsigned char> combined(entropy);
-    combined.push_back(checksum);
+    // Combine entropy and checksum bits
+    std::vector<bool> bits = BytesToBits(entropy);
+    for (int i = 0; i < checksum_bits; ++i) {
+        bits.push_back((hash[0] >> (7 - i)) & 1);
+    }
 
-    // Convert to mnemonic
+    // Convert to words
     const auto& wordlist = GetWordList();
     std::stringstream mnemonic;
-    for (size_t i = 0; i < combined.size() * 8 / 11; ++i) {
-        int index = 0;
-        for (int j = 0; j < 11; ++j) {
-            int bit = (combined[i * 11 + j / 8] >> (7 - (j % 8))) & 1;
-            index = (index << 1) | bit;
-        }
-        mnemonic << wordlist[index] << " ";
+    for (size_t i = 0; i < bits.size(); i += 11) {
+        int idx = BitsToInt(bits, i, 11);
+        mnemonic << wordlist[idx] << " ";
     }
 
     std::string result = mnemonic.str();
@@ -90,7 +112,8 @@ bool ValidateMnemonic(const std::string& mnemonic) {
         words.push_back(word);
     }
 
-    if (words.size() != 12 && words.size() != 15 && words.size() != 18 && words.size() != 21 && words.size() != 24) {
+    if (words.size() != 12 && words.size() != 15 && words.size() != 18 &&
+        words.size() != 21 && words.size() != 24) {
         return false;
     }
 
@@ -102,12 +125,19 @@ std::vector<unsigned char> MnemonicToSeed(const std::string& mnemonic, const std
         throw std::invalid_argument("Invalid mnemonic phrase.");
     }
 
+    std::string salt = "mnemonic" + passphrase;
     std::vector<unsigned char> seed(64);
-    CHMAC_SHA512 hmac((unsigned char*)"Bitcoin seed", 12);
-    hmac.Write((unsigned char*)mnemonic.c_str(), mnemonic.size())
-        .Write((unsigned char*)passphrase.c_str(), passphrase.size())
-        .Finalize(seed.data());
+
+    PKCS5_PBKDF2_HMAC(
+        mnemonic.c_str(), mnemonic.size(),
+        reinterpret_cast<const unsigned char*>(salt.c_str()), salt.size(),
+        2048,
+        EVP_sha512(),
+        64,
+        seed.data()
+    );
+
     return seed;
 }
 
-} // namespace wallet 
+} // namespace wallet

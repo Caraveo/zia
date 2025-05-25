@@ -17,11 +17,13 @@
 #include <wallet/rpc/wallet.h>
 #include <wallet/wallet.h>
 #include <wallet/walletutil.h>
+#include <wallet/mnemonic.h>
+#include <tinyformat.h>
 
 #include <optional>
 
 
-namespace wallet {
+namespace wallet {    
 
 static const std::map<uint64_t, std::string> WALLET_FLAG_CAVEATS{
     {WALLET_FLAG_AVOID_REUSE,
@@ -29,6 +31,28 @@ static const std::map<uint64_t, std::string> WALLET_FLAG_CAVEATS{
      "destinations in the past. Until this is done, some destinations may "
      "be considered unused, even if the opposite is the case."},
 };
+
+static UniValue createphrase(const JSONRPCRequest& request)
+{
+    if (request.params.size() != 1)
+        throw std::runtime_error(
+            "createphrase <entropy_bits>\n"
+            "Generate a mnemonic phrase with given entropy size (128, 160, 192, 224, 256).");
+
+    int entropy_bits;
+    try {
+        entropy_bits = request.params[0].getInt<int>();
+    } catch (const std::runtime_error&) {
+        throw std::runtime_error("Entropy bits must be a number");
+    }
+
+    if (entropy_bits != 128 && entropy_bits != 160 && entropy_bits != 192 && entropy_bits != 224 && entropy_bits != 256) {
+        throw std::runtime_error("Entropy size must be one of: 128, 160, 192, 224, 256");
+    }
+
+    std::string mnemonic = wallet::GenerateMnemonic(entropy_bits);
+    return mnemonic;
+}
 
 static RPCHelpMan getwalletinfo()
 {
@@ -290,19 +314,19 @@ static RPCHelpMan setwalletflag()
     bool value = request.params[1].isNull() || request.params[1].get_bool();
 
     if (!WALLET_FLAG_MAP.count(flag_str)) {
-        throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Unknown wallet flag: %s", flag_str));
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Unknown wallet flag: " + flag_str);
     }
 
     auto flag = WALLET_FLAG_MAP.at(flag_str);
 
     if (!(flag & MUTABLE_WALLET_FLAGS)) {
-        throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Wallet flag is immutable: %s", flag_str));
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Wallet flag is immutable: " + flag_str);
     }
 
     UniValue res(UniValue::VOBJ);
 
     if (pwallet->IsWalletFlagSet(flag) == value) {
-        throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Wallet flag is already set to %s: %s", value ? "true" : "false", flag_str));
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Wallet flag is already set to " + std::string(value ? "true" : "false") + ": " + flag_str);
     }
 
     res.pushKV("flag_name", flag_str);
@@ -520,7 +544,7 @@ static RPCHelpMan upgradewallet()
         if (previous_version == current_version) {
             result = "Already at latest version. Wallet version unchanged.";
         } else {
-            result = strprintf("Wallet upgraded successfully from version %i to version %i.", previous_version, current_version);
+            result = "Wallet upgraded successfully from version " + std::to_string(previous_version) + " to version " + std::to_string(current_version) + ".";
         }
     }
 
@@ -611,7 +635,7 @@ RPCHelpMan simulaterawtransaction()
 
         // Fetch debit; we are *spending* these; if the transaction is signed and
         // broadcast, we will lose everything in these
-        for (const auto& txin : mtx.vin) {
+        for (const CTxIn& txin : mtx.vin) {
             const auto& outpoint = txin.prevout;
             if (spent.count(outpoint)) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Transaction(s) are spending the same output more than once");
@@ -761,8 +785,8 @@ RPCHelpMan gethdkeys()
             LOCK(wallet->cs_wallet);
 
             UniValue options{request.params[0].isNull() ? UniValue::VOBJ : request.params[0]};
-            const bool active_only{options.exists("active_only") ? options["active_only"].get_bool() : false};
-            const bool priv{options.exists("private") ? options["private"].get_bool() : false};
+            const bool active_only{options["active_only"].get_bool()};
+            const bool priv{options["private"].get_bool()};
             if (priv) {
                 EnsureWalletIsUnlocked(*wallet);
             }
@@ -863,7 +887,7 @@ static RPCHelpMan createwalletdescriptor()
 
             std::optional<OutputType> output_type = ParseOutputType(request.params[0].get_str());
             if (!output_type) {
-                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, strprintf("Unknown address type '%s'", request.params[0].get_str()));
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Unknown address type '" + request.params[0].get_str() + "'");
             }
 
             UniValue options{request.params[1].isNull() ? UniValue::VOBJ : request.params[1]};
@@ -897,7 +921,7 @@ static RPCHelpMan createwalletdescriptor()
 
             std::optional<CKey> key = pwallet->GetKey(xpub.pubkey.GetID());
             if (!key) {
-                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, strprintf("Private key for %s is not known", EncodeExtPubKey(xpub)));
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Private key for " + EncodeExtPubKey(xpub) + " is not known");
             }
             CExtKey active_hdkey(xpub, *key);
 
@@ -1049,6 +1073,7 @@ std::span<const CRPCCommand> GetWalletRPCCommands()
         {"wallet", &unloadwallet},
         {"wallet", &upgradewallet},
         {"wallet", &walletcreatefundedpsbt},
+        {"wallet", "createphrase", [](const JSONRPCRequest& request, UniValue& result, bool) { result = createphrase(request); return true; }, {{"entropy_bits", false}}, 0},
 #ifdef ENABLE_EXTERNAL_SIGNER
         {"wallet", &walletdisplayaddress},
 #endif // ENABLE_EXTERNAL_SIGNER

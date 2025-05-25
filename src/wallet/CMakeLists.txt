@@ -39,9 +39,16 @@ target_link_libraries(ziacoin_wallet
   PRIVATE
     core_interface
     ziacoin_common
+    ziacoin_util
+    OpenSSL::SSL
+    OpenSSL::Crypto
     $<TARGET_NAME_IF_EXISTS:unofficial::sqlite3::sqlite3>
     $<TARGET_NAME_IF_EXISTS:SQLite::SQLite3>
     univalue
     Boost::headers
     $<TARGET_NAME_IF_EXISTS:USDT::headers>
+)
+target_include_directories(ziacoin_wallet
+  PRIVATE
+    ${OPENSSL_INCLUDE_DIR}
 )
