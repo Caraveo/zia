@@ -1,0 +1,18 @@
+// ZiaCoin Genesis C++ Configuration
+genesis = CreateGenesisBlock("The beginning of ZiaCoin - 2025-05-24", 1748190366, 16389, 0x207fffff, 1, 50 * COIN);
+consensus.hashGenesisBlock = genesis.GetHash();
+assert(consensus.hashGenesisBlock == uint256S("000000bee2ba836641fea746ef5c8ab612c78c754e2f8fd6a0f592ffb81d6c03"));
+assert(genesis.hashMerkleRoot == uint256S("9f53a7cc67254bce29a7cfe281ce26a22dbfa469f35218f541c3aed6274bdb11"));
+bech32_hrp = "zia";
+
+// Base58 prefixes
+base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1, 65);
+base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1, 125);
+base58Prefixes[SECRET_KEY]     = std::vector<unsigned char>(1, 212);
+
+// Default Ports
+case ChainType::MAINNET: return std::make_unique<CBaseChainParams>("", 9888);
+case ChainType::TESTNET: return std::make_unique<CBaseChainParams>("testnet", 19888);
+case ChainType::TESTNET4: return std::make_unique<CBaseChainParams>("testnet4", 18888);
+case ChainType::SIGNET: return std::make_unique<CBaseChainParams>("signet", 17888);
+case ChainType::REGTEST: return std::make_unique<CBaseChainParams>("regtest", 15888);
