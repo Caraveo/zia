@@ -34,10 +34,11 @@ static const std::map<uint64_t, std::string> WALLET_FLAG_CAVEATS{
 
 static UniValue createphrase(const JSONRPCRequest& request)
 {
-    if (request.params.size() != 1)
+    if (request.params.size() < 1 || request.params.size() > 2)
         throw std::runtime_error(
-            "createphrase <entropy_bits>\n"
-            "Generate a mnemonic phrase with given entropy size (128, 160, 192, 224, 256).");
+            "createphrase <entropy_bits> [passphrase]\n"
+            "Generate a mnemonic phrase with given entropy size (128, 160, 192, 224, 256).\n"
+            "Optionally provide a passphrase to generate a BIP39 seed.");
 
     int entropy_bits;
     try {
@@ -51,7 +52,13 @@ static UniValue createphrase(const JSONRPCRequest& request)
     }
 
     std::string mnemonic = wallet::GenerateMnemonic(entropy_bits);
-    return mnemonic;
+    std::string passphrase = request.params.size() > 1 ? request.params[1].get_str() : "";
+    std::vector<unsigned char> seed = wallet::MnemonicToSeed(mnemonic, passphrase);
+
+    UniValue out(UniValue::VOBJ);
+    out.pushKV("mnemonic", mnemonic);
+    out.pushKV("seed", HexStr(seed));
+    return out;
 }
 
 static RPCHelpMan getwalletinfo()
@@ -1073,7 +1080,7 @@ std::span<const CRPCCommand> GetWalletRPCCommands()
         {"wallet", &unloadwallet},
         {"wallet", &upgradewallet},
         {"wallet", &walletcreatefundedpsbt},
-        {"wallet", "createphrase", [](const JSONRPCRequest& request, UniValue& result, bool) { result = createphrase(request); return true; }, {{"entropy_bits", false}}, 0},
+        {"wallet", "createphrase", [](const JSONRPCRequest& request, UniValue& result, bool) { result = createphrase(request); return true; }, {{"entropy_bits", false}, {"passphrase", true}}, 0},
 #ifdef ENABLE_EXTERNAL_SIGNER
         {"wallet", &walletdisplayaddress},
 #endif // ENABLE_EXTERNAL_SIGNER
