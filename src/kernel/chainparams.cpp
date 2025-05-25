@@ -71,8 +71,8 @@ static CBlock CreateGenesisBlock(const char* pszTimestamp, const CScript& genesi
  */
 static CBlock CreateGenesisBlock(uint32_t nTime, uint32_t nNonce, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward)
 {
-    const char* pszTimestamp = "The Times 03/Jan/2009 Chancellor on brink of second bailout for banks";
-    const CScript genesisOutputScript = CScript() << "04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5f"_hex << OP_CHECKSIG;
+    const char* pszTimestamp = "03/May/2024 ZiaCoin Network Launch";
+    const CScript genesisOutputScript = CScript() << ParseHex("04a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b") << OP_CHECKSIG;
     return CreateGenesisBlock(pszTimestamp, genesisOutputScript, nTime, nNonce, nBits, nVersion, genesisReward);
 }
 
@@ -86,7 +86,7 @@ public:
         consensus.signet_blocks = false;
         consensus.signet_challenge.clear();
         consensus.nSubsidyHalvingInterval = 210000;
-        consensus.script_flag_exceptions.clear(); // Clear Bitcoin's exceptions
+        consensus.script_flag_exceptions.clear();
         consensus.BIP34Height = 1;
         consensus.BIP34Hash = uint256{};
         consensus.BIP65Height = 1;
@@ -117,24 +117,36 @@ public:
         pchMessageStart[1] = 0x69; // i
         pchMessageStart[2] = 0x61; // a
         pchMessageStart[3] = 0x43; // C
-        nDefaultPort = 8334; // Different from Bitcoin's 8333
+        nDefaultPort = 8334;
         nPruneAfterHeight = 100000;
         m_assumed_blockchain_size = 1;
         m_assumed_chain_state_size = 1;
 
-        // Use your genesis block from genesis.py
-        const char* genesis_msg = "03/May/2024 ZiaCoin Network Launch";
-        const CScript genesis_script = CScript() << "000000000000000000000000000000000000000000000000000000000000000000"_hex << OP_CHECKSIG;
+        // Genesis block parameters for ZiaCoin
+        const char* genesis_msg = "The beginning of ZiaCoin - 2025-05-24";
+        const CScript genesis_script = CScript() << ParseHex("04a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b0") << OP_CHECKSIG;
+        
         genesis = CreateGenesisBlock(genesis_msg,
                 genesis_script,
-                1714777860, // Current timestamp
-                393743547,  // Nonce from your genesis.py
-                0x1d00ffff,
-                1,
-                50 * COIN);
+                1748190366, // Timestamp: 2025-05-24
+                16389,      // Nonce
+                0x207fffff, // nBits (easy mining)
+                1,          // nVersion
+                50 * COIN); // genesisReward
+        
         consensus.hashGenesisBlock = genesis.GetHash();
-        assert(consensus.hashGenesisBlock == uint256{"00000000da84f2bafbbc53dee25a72ae507ff4914b867c565be350b0da8bf043"});
-        assert(genesis.hashMerkleRoot == uint256{"7aa0a7ae1e223414cb807e40cd57e667b718e42aaf9306db9102fe28912b7b4e"});
+        
+        // Print debug information to terminal
+        fprintf(stderr, "Generated genesis block hash: %s\n", consensus.hashGenesisBlock.ToString().c_str());
+        fprintf(stderr, "Expected genesis block hash: 000000bee2ba836641fea746ef5c8ab612c78c754e2f8fd6a0f592ffb81d6c03\n");
+        fprintf(stderr, "Genesis block merkle root: %s\n", genesis.hashMerkleRoot.ToString().c_str());
+        
+        LogPrintf("Generated genesis block hash: %s\n", consensus.hashGenesisBlock.ToString());
+        LogPrintf("Expected genesis block hash: 000000bee2ba836641fea746ef5c8ab612c78c754e2f8fd6a0f592ffb81d6c03\n");
+        LogPrintf("Genesis block merkle root: %s\n", genesis.hashMerkleRoot.ToString());
+        
+        assert(consensus.hashGenesisBlock == uint256{"000000bee2ba836641fea746ef5c8ab612c78c754e2f8fd6a0f592ffb81d6c03"});
+        assert(genesis.hashMerkleRoot == uint256{"9f53a7cc67254bce29a7cfe281ce26a22dbfa469f35218f541c3aed6274bdb11"});
 
         // Clear Bitcoin's seed nodes
         vFixedSeeds.clear();
