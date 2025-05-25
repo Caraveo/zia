@@ -1025,12 +1025,13 @@ RPCHelpMan abortrescan();
 
 static UniValue createrecord(const JSONRPCRequest& request)
 {
-    if (request.params.size() != 1)
+    if (request.params.size() != 2)
         throw std::runtime_error(
-            "createrecord <passphrase>\n"
-            "Create a new wallet with a mnemonic phrase and seed derived from the passphrase.");
+            "createrecord <wallet_name> <passphrase>\n"
+            "Create a new wallet with specified name, mnemonic phrase and seed derived from the passphrase.");
 
-    const std::string passphrase = request.params[0].get_str();
+    const std::string wallet_name = request.params[0].get_str();
+    const std::string passphrase = request.params[1].get_str();
     
     // Generate mnemonic and seed
     std::string mnemonic = wallet::GenerateMnemonic(128); // Using 128 bits for simplicity
@@ -1038,7 +1039,6 @@ static UniValue createrecord(const JSONRPCRequest& request)
 
     // Create a new wallet
     WalletContext& context = EnsureWalletContext(request.context);
-    std::string wallet_name = "wallet_" + std::to_string(GetTime());
     
     DatabaseOptions options;
     DatabaseStatus status;
@@ -1057,11 +1057,11 @@ static UniValue createrecord(const JSONRPCRequest& request)
 
     // Get a new address
     LOCK(wallet->cs_wallet);
-    CTxDestination dest;
-    bilingual_str error_msg;
-    if (!wallet->GetNewDestination(OutputType::BECH32, "", dest, error_msg)) {
-        throw JSONRPCError(RPC_WALLET_ERROR, "Failed to generate address: " + error_msg.original);
+    auto result = wallet->GetNewDestination(OutputType::BECH32, "receive");
+    if (!result) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Failed to generate address");
     }
+    CTxDestination dest = *result;
 
     // Return all the information
     UniValue out(UniValue::VOBJ);
@@ -1140,7 +1140,7 @@ std::span<const CRPCCommand> GetWalletRPCCommands()
         {"wallet", &upgradewallet},
         {"wallet", &walletcreatefundedpsbt},
         {"wallet", "createphrase", [](const JSONRPCRequest& request, UniValue& result, bool) { result = createphrase(request); return true; }, {{"entropy_bits", false}, {"passphrase", true}}, 0},
-        {"wallet", "createrecord", [](const JSONRPCRequest& request, UniValue& result, bool) { result = createrecord(request); return true; }, {{"passphrase", false}}, 0},
+        {"wallet", "createrecord", [](const JSONRPCRequest& request, UniValue& result, bool) { result = createrecord(request); return true; }, {{"wallet_name", false}, {"passphrase", false}}, 0},
 #ifdef ENABLE_EXTERNAL_SIGNER
         {"wallet", &walletdisplayaddress},
 #endif // ENABLE_EXTERNAL_SIGNER
