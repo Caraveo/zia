@@ -1,79 +1,97 @@
-ZiaCoin Core integration/staging tree
-=====================================
+# ZiaCoin Network
 
-https://ziacoincore.org
+ZiaCoin is a modern cryptocurrency implementation focused on security, privacy, and user-friendly features. Built on the foundations of Bitcoin Core, ZiaCoin adds enhanced functionality while maintaining the robust security model of its predecessor.
 
-For an immediately usable, binary version of the ZiaCoin Core software, see
-https://ziacoincore.org/en/download/.
+## Features
 
-What is ZiaCoin Core?
----------------------
+- **Mnemonic Phrase Generation**: Generate secure mnemonic phrases with configurable entropy (128, 160, 192, 224, 256 bits)
+- **HD Wallet Support**: Hierarchical Deterministic (HD) wallet implementation for better key management
+- **Descriptor Wallets**: Modern wallet architecture using output script descriptors
+- **External Signer Support**: Hardware wallet integration capabilities
+- **SQLite Database**: Efficient and reliable wallet storage
 
-ZiaCoin Core connects to the ZiaCoin peer-to-peer network to download and fully
-validate blocks and transactions. It also includes a wallet and graphical user
-interface, which can be optionally built.
+## Building
 
-Further information about ZiaCoin Core is available in the [doc folder](/doc).
+### Prerequisites
 
-License
--------
+- macOS (primary development platform)
+- C++17 compatible compiler
+- CMake 3.16 or higher
+- SQLite3 development libraries
 
-ZiaCoin Core is released under the terms of the MIT license. See [COPYING](COPYING) for more
-information or see https://opensource.org/license/MIT.
+### Build Instructions
 
-Development Process
--------------------
+```bash
+# Clone the repository
+git clone https://github.com/caraveo/zia.git
+cd zia
 
-The `master` branch is regularly built (see `doc/build-*.md` for instructions) and tested, but it is not guaranteed to be
-completely stable. [Tags](https://github.com/ziacoin/ziacoin/tags) are created
-regularly from release branches to indicate new official, stable release versions of ZiaCoin Core.
+# Create build directory
+mkdir build && cd build
 
-The https://github.com/ziacoin-core/gui repository is used exclusively for the
-development of the GUI. Its master branch is identical in all monotree
-repositories. Release branches and tags do not exist, so please do not fork
-that repository unless it is for development reasons.
+# Configure and build
+cmake ..
+make -j$(sysctl -n hw.ncpu)
+```
 
-The contribution workflow is described in [CONTRIBUTING.md](CONTRIBUTING.md)
-and useful hints for developers can be found in [doc/developer-notes.md](doc/developer-notes.md).
+## Usage
 
-Testing
--------
+### Command Line Interface
 
-Testing and code review is the bottleneck for development; we get more pull
-requests than we can review and test on short notice. Please be patient and help out by testing
-other people's pull requests, and remember this is a security-critical project where any mistake might cost people
-lots of money.
+The ZiaCoin CLI provides various wallet management commands:
 
-### Automated Testing
+```bash
+# Generate a new mnemonic phrase
+./ziacoin-cli createphrase 256
 
-Developers are strongly encouraged to write [unit tests](src/test/README.md) for new code, and to
-submit new unit tests for old code. Unit tests can be compiled and run
-(assuming they weren't disabled during the generation of the build system) with: `ctest`. Further details on running
-and extending unit tests can be found in [/src/test/README.md](/src/test/README.md).
+# Create a new wallet
+./ziacoin-cli createwallet "mywallet"
 
-There are also [regression and integration tests](/test), written
-in Python.
-These tests can be run (if the [test dependencies](/test) are installed) with: `build/test/functional/test_runner.py`
-(assuming `build` is your build directory).
+# Get wallet information
+./ziacoin-cli getwalletinfo
+```
 
-The CI (Continuous Integration) systems make sure that every pull request is built for Windows, Linux, and macOS,
-and that unit/sanity tests are run automatically.
+### RPC API
 
-### Manual Quality Assurance (QA) Testing
+ZiaCoin provides a comprehensive RPC API for programmatic interaction:
 
-Changes should be tested by somebody other than the developer who wrote the
-code. This is especially important for large or high-risk changes. It is useful
-to add a test plan to the pull request description if testing the changes is
-not straightforward.
+```json
+// Generate mnemonic phrase
+{
+  "method": "createphrase",
+  "params": [256]
+}
 
-Translations
-------------
+// Create wallet
+{
+  "method": "createwallet",
+  "params": ["mywallet", true, false, "passphrase", true, true]
+}
+```
 
-Changes to translations as well as new translations can be submitted to
-[ZiaCoin Core's Transifex page](https://www.transifex.com/ziacoin/ziacoin/).
+## Development
 
-Translations are periodically pulled from Transifex and merged into the git repository. See the
-[translation process](doc/translation_process.md) for details on how this works.
+### Project Structure
 
-**Important**: We do not accept translation changes as GitHub pull requests because the next
-pull from Transifex would automatically overwrite them again.
+- `src/wallet/`: Wallet implementation
+  - `rpc/`: RPC command handlers
+  - `mnemonic.h`: Mnemonic phrase generation
+  - `wallet.h`: Core wallet functionality
+
+### Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- Based on Bitcoin Core
+- Uses BIP32/39/44 for HD wallet implementation
+- Implements BIP174 for Partially Signed Bitcoin Transactions (PSBT)

@@ -41,7 +41,7 @@ static UniValue createphrase(const JSONRPCRequest& request)
 
     int entropy_bits;
     try {
-        entropy_bits = request.params[0].getInt<int>();
+        entropy_bits = std::stoi(request.params[0].get_str());
     } catch (const std::runtime_error&) {
         throw std::runtime_error("Entropy bits must be a number");
     }
