@@ -8,14 +8,36 @@
 #include <sstream>
 #include <vector>
 #include <string>
+#include <fstream>
 
 namespace wallet {
 
-// BIP39 wordlist (simplified for brevity; in production, use a complete list)
-const std::vector<std::string> wordlist = {
-    "abandon", "ability", "able", "about", "above", "absent", "absorb", "abstract", "absurd", "abuse",
-    // ... (add more words as needed)
-};
+// Load wordlist from file
+std::vector<std::string> LoadWordList() {
+    std::vector<std::string> words;
+    std::ifstream file("word.csv");
+    std::string line;
+    while (std::getline(file, line)) {
+        std::stringstream ss(line);
+        std::string word;
+        while (std::getline(ss, word, ',')) {
+            // Remove quotes and trim whitespace
+            word.erase(std::remove(word.begin(), word.end(), '"'), word.end());
+            word.erase(0, word.find_first_not_of(" \t"));
+            word.erase(word.find_last_not_of(" \t") + 1);
+            if (!word.empty()) {
+                words.push_back(word);
+            }
+        }
+    }
+    return words;
+}
+
+// Get wordlist (lazy loaded)
+const std::vector<std::string>& GetWordList() {
+    static const std::vector<std::string> wordlist = LoadWordList();
+    return wordlist;
+}
 
 std::string GenerateMnemonic(int entropy_size) {
     if (entropy_size % 32 != 0 || entropy_size < 128 || entropy_size > 256) {
@@ -36,6 +58,7 @@ std::string GenerateMnemonic(int entropy_size) {
     combined.push_back(checksum);
 
     // Convert to mnemonic
+    const auto& wordlist = GetWordList();
     std::stringstream mnemonic;
     for (size_t i = 0; i < combined.size() * 8 / 11; ++i) {
         int index = 0;
@@ -52,6 +75,7 @@ std::string GenerateMnemonic(int entropy_size) {
 }
 
 bool ValidateMnemonic(const std::string& mnemonic) {
+    const auto& wordlist = GetWordList();
     std::istringstream iss(mnemonic);
     std::vector<std::string> words;
     std::string word;
