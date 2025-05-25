@@ -126,7 +126,7 @@ public:
         const char* genesis_msg = "The beginning of ZiaCoin - 2025-05-24";
         const CScript genesis_script = CScript() << ParseHex("04a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b0") << OP_CHECKSIG;
         
-        genesis = CreateGenesisBlock(
+        genesis = CreateGenesisBlock("The beginning of ZiaCoin - 2025-05-24", 1748190366, 16389, 0x207fffff, 1, 50 * COIN);
                 genesis_msg,
                 genesis_script,
                 1748190366, // Timestamp: 2025-05-24
@@ -154,9 +154,9 @@ public:
         vSeeds.clear();
 
         // ZiaCoin address prefixes
-        base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,65); // Z
-        base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1,125); // Z
-        base58Prefixes[SECRET_KEY] =     std::vector<unsigned char>(1,212);
+        base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1, 65);
+        base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1, 125);
+        base58Prefixes[SECRET_KEY]     = std::vector<unsigned char>(1, 212);
         base58Prefixes[EXT_PUBLIC_KEY] = {0x04, 0x88, 0xB2, 0x1E};
         base58Prefixes[EXT_SECRET_KEY] = {0x04, 0x88, 0xAD, 0xE4};
 

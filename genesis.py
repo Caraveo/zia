@@ -9,6 +9,7 @@ from pathlib import Path
 import binascii
 import sys
 from datetime import datetime
+import re
 
 # ======== Custom Network Settings ========
 network_name   = "ZiaCoin Mainnet"
@@ -187,7 +188,7 @@ print("\n=== ZiaCoin Genesis Block (C++ formatted) ===")
 print(f'// Generated for {network_name}')
 print(f'genesis = CreateGenesisBlock("{psz_timestamp}", {n_time}, {genesis_nonce}, {hex(n_bits)}, 1, 50 * COIN);')
 print(f'consensus.hashGenesisBlock = genesis.GetHash();')
-print(f'assert(consensus.hashGenesisBlock == uint256S("{expected_hash}"));')
+print(f'assert(consensus.hashGenesisBlock == uint256S("{hash_hex}"));')
 print(f'assert(genesis.hashMerkleRoot == uint256S("{merkle_hex}"));')
 print(f'bech32_hrp = "{bech32_prefix}";')
 print()
@@ -206,7 +207,7 @@ with open("zia_genesis_output.txt", "w") as f:
     f.write("// ZiaCoin Genesis C++ Configuration\n")
     f.write(f'genesis = CreateGenesisBlock("{psz_timestamp}", {n_time}, {genesis_nonce}, {hex(n_bits)}, 1, 50 * COIN);\n')
     f.write(f'consensus.hashGenesisBlock = genesis.GetHash();\n')
-    f.write(f'assert(consensus.hashGenesisBlock == uint256S("{expected_hash}"));\n')
+    f.write(f'assert(consensus.hashGenesisBlock == uint256S("{hash_hex}"));\n')
     f.write(f'assert(genesis.hashMerkleRoot == uint256S("{merkle_hex}"));\n')
     f.write(f'bech32_hrp = "{bech32_prefix}";\n\n')
     f.write("// Base58 prefixes\n")
@@ -255,12 +256,6 @@ rpcport=38832
 # === Wallet Settings ===
 wallet=wallet.dat
 disablewallet=0
-
-# === Debug Settings ===
-debug=rpc
-debug=net
-logtimestamps=1
-shrinkdebugfile=1
 """
     datadir.mkdir(parents=True, exist_ok=True)
     with open(config_path, "w") as f:
@@ -356,6 +351,57 @@ def main():
     assert(consensus.hashGenesisBlock == uint256{{"{result['hash']}"}});
     assert(genesis.hashMerkleRoot == uint256{{"{result['merkle_root']}"}});
     """)
+
+    # Update chainparams.cpp
+    update_chainparams_cpp()
+
+def update_chainparams_cpp():
+    # Read the file
+    with open("src/kernel/chainparams.cpp", "r") as f:
+        lines = f.readlines()
+
+    # Prepare new lines for the genesis block section
+    new_lines = []
+    replaced = False
+    for line in lines:
+        # Replace genesis block creation
+        if re.search(r'genesis = CreateGenesisBlock\(', line):
+            new_lines.append(f'        genesis = CreateGenesisBlock("{psz_timestamp}", {n_time}, {genesis_nonce}, {hex(n_bits)}, 1, 50 * COIN);\n')
+            replaced = True
+            continue
+        # Replace hashGenesisBlock assertion
+        if re.search(r'assert\(consensus\.hashGenesisBlock == uint256', line):
+            new_lines.append(f'        assert(consensus.hashGenesisBlock == uint256{{"{hash_hex}"}});\n')
+            replaced = True
+            continue
+        # Replace merkle root assertion
+        if re.search(r'assert\(genesis\.hashMerkleRoot == uint256', line):
+            new_lines.append(f'        assert(genesis.hashMerkleRoot == uint256{{"{merkle_hex}"}});\n')
+            replaced = True
+            continue
+        # Replace base58 prefixes
+        if re.search(r'base58Prefixes\[PUBKEY_ADDRESS\]', line):
+            new_lines.append('        base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1, 65);\n')
+            replaced = True
+            continue
+        if re.search(r'base58Prefixes\[SCRIPT_ADDRESS\]', line):
+            new_lines.append('        base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1, 125);\n')
+            replaced = True
+            continue
+        if re.search(r'base58Prefixes\[SECRET_KEY\]', line):
+            new_lines.append('        base58Prefixes[SECRET_KEY]     = std::vector<unsigned char>(1, 212);\n')
+            replaced = True
+            continue
+        # Otherwise, keep the line
+        new_lines.append(line)
+
+    # Write back if any replacements were made
+    if replaced:
+        with open("src/kernel/chainparams.cpp", "w") as f:
+            f.writelines(new_lines)
+        print(f"✅ Updated src/kernel/chainparams.cpp with new genesis block parameters.")
+    else:
+        print("⚠️ No genesis block section found to update in chainparams.cpp.")
 
 if __name__ == '__main__':
     main()
