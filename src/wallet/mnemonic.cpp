@@ -1,6 +1,7 @@
 #include <wallet/mnemonic.h>
 #include <random.h>
 #include <util/strencodings.h>
+#include <crypto/sha256.h>
 #include <crypto/sha512.h>
 #include <crypto/hmac_sha512.h>
 #include <cstring>
@@ -9,6 +10,7 @@
 #include <vector>
 #include <string>
 #include <fstream>
+#include <span>
 
 namespace wallet {
 
@@ -45,11 +47,13 @@ std::string GenerateMnemonic(int entropy_size) {
     }
 
     std::vector<unsigned char> entropy(entropy_size / 8);
-    GetStrongRandBytes(entropy.data(), entropy.size());
+    std::span<unsigned char> entropy_span(entropy.data(), entropy.size());
+    GetStrongRandBytes(entropy_span);
 
     // Calculate checksum
-    unsigned char hash[SHA256_DIGEST_LENGTH];
-    CSHA256().Write(entropy.data(), entropy.size()).Finalize(hash);
+    unsigned char hash[CSHA256::OUTPUT_SIZE];
+    CSHA256 sha256;
+    sha256.Write(entropy.data(), entropy.size()).Finalize(hash);
     int checksum_bits = entropy_size / 32;
     unsigned char checksum = hash[0] >> (8 - checksum_bits);
 
@@ -99,9 +103,10 @@ std::vector<unsigned char> MnemonicToSeed(const std::string& mnemonic, const std
     }
 
     std::vector<unsigned char> seed(64);
-    CHMAC_SHA512("Bitcoin seed").Write((unsigned char*)mnemonic.c_str(), mnemonic.size())
-                               .Write((unsigned char*)passphrase.c_str(), passphrase.size())
-                               .Finalize(seed.data());
+    CHMAC_SHA512 hmac((unsigned char*)"Bitcoin seed", 12);
+    hmac.Write((unsigned char*)mnemonic.c_str(), mnemonic.size())
+        .Write((unsigned char*)passphrase.c_str(), passphrase.size())
+        .Finalize(seed.data());
     return seed;
 }
 
