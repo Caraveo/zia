@@ -33,6 +33,7 @@ add_library(ziacoin_wallet STATIC EXCLUDE_FROM_ALL
   wallet.cpp
   walletdb.cpp
   walletutil.cpp
+  mnemonic.cpp
 )
 target_link_libraries(ziacoin_wallet
   PRIVATE
