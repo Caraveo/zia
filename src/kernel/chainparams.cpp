@@ -126,14 +126,15 @@ public:
         const char* genesis_msg = "The beginning of ZiaCoin - 2025-05-24";
         const CScript genesis_script = CScript() << ParseHex("04a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b0") << OP_CHECKSIG;
         
-        genesis = CreateGenesisBlock("The beginning of ZiaCoin - 2025-05-24", 1748190366, 16389, 0x207fffff, 1, 50 * COIN);
-                genesis_msg,
-                genesis_script,
-                1748190366, // Timestamp: 2025-05-24
-                16389,      // Nonce
-                0x207fffff, // nBits (easy mining)
-                1,          // nVersion
-                50 * COIN); // genesisReward
+        CBlock genesis = CreateGenesisBlock(
+            "The beginning of ZiaCoin - 2025-05-24",
+            CScript() << ParseHex("04a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b0") << OP_CHECKSIG,
+            1748190366,  // nTime
+            16389,       // nNonce
+            0x207fffff,  // nBits
+            1,           // nVersion
+            50 * COIN    // genesisReward
+        );
         
         consensus.hashGenesisBlock = genesis.GetHash();
         
