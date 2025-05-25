@@ -127,8 +127,8 @@ public:
         const CScript genesis_script = CScript() << ParseHex("04a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b0") << OP_CHECKSIG;
         
         CBlock genesis = CreateGenesisBlock(
-            "The beginning of ZiaCoin - 2025-05-24",
-            CScript() << ParseHex("04a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b0") << OP_CHECKSIG,
+            genesis_msg,
+            genesis_script,
             1748190366,  // nTime
             16389,       // nNonce
             0x207fffff,  // nBits
