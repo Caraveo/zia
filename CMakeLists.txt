@@ -61,6 +61,10 @@ project(ZiaCoinCore
 find_package(OpenSSL REQUIRED)
 include_directories(${OPENSSL_INCLUDE_DIR})
 
+# Find nlohmann-json
+find_package(nlohmann_json 3.12.0 REQUIRED)
+include_directories(${nlohmann_json_INCLUDE_DIRS})
+
 set(CLIENT_VERSION_STRING ${PROJECT_VERSION})
 if(CLIENT_VERSION_RC GREATER 0)
   string(APPEND CLIENT_VERSION_STRING "rc${CLIENT_VERSION_RC}")

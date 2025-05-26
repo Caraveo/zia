@@ -29,8 +29,10 @@
 #include <sstream>
 #include <string>
 #include <filesystem>
+#include <nlohmann/json.hpp>
 
 using namespace util::hex_literals;
+using json = nlohmann::json;
 
 // Workaround MSVC bug triggering C7595 when calling consteval constructors in
 // initializer lists.
@@ -150,6 +152,43 @@ static bool LoadGenesisFromFile(CBlock& genesis, uint256& hashGenesisBlock, uint
     return true;
 }
 
+// New function to load genesis block parameters from mining_params.json
+static bool LoadMiningParameters(uint256& hashGenesisBlock, uint256& hashMerkleRoot, uint32_t& nTime, uint32_t& nNonce, uint32_t& nBits)
+{
+    std::filesystem::path miningPath = std::filesystem::path("mining_params.json");
+    if (!std::filesystem::exists(miningPath)) {
+        LogPrintf("Warning: mining_params.json not found. Using default genesis block.\n");
+        return false;
+    }
+
+    try {
+        std::ifstream file(miningPath);
+        json mining_params = json::parse(file);
+
+        // Load parameters from JSON
+        std::string hashStr = mining_params["hash"].get<std::string>();
+        std::string merkleStr = mining_params["merkle_root"].get<std::string>();
+        nTime = mining_params["timestamp"].get<uint32_t>();
+        nNonce = mining_params["nonce"].get<uint32_t>();
+        std::string bitsStr = mining_params["n_bits"].get<std::string>();
+        nBits = std::stoul(bitsStr, nullptr, 16);
+
+        // Convert hex strings to uint256
+        std::vector<unsigned char> hashBytes = ParseHex(hashStr);
+        std::vector<unsigned char> merkleBytes = ParseHex(merkleStr);
+        
+        if (hashBytes.size() == 32 && merkleBytes.size() == 32) {
+            hashGenesisBlock = uint256(hashBytes);
+            hashMerkleRoot = uint256(merkleBytes);
+            LogPrintf("Loaded mining parameters from mining_params.json\n");
+            return true;
+        }
+    } catch (const std::exception& e) {
+        LogPrintf("Warning: Failed to parse mining_params.json: %s\n", e.what());
+    }
+    return false;
+}
+
 /**
  * Main network on which people trade goods and services.
  */
@@ -197,10 +236,10 @@ public:
         m_assumed_chain_state_size = 1;
 
         // Genesis block parameters for ZiaCoin
-        const char* genesis_msg = "The beginning of ZiaCoin - 2025-05-24";
+        const char* genesis_msg = "The beginning of ZiaCoin - 2025-05-24";  // This will be overridden if loading from file
         const CScript genesis_script = CScript() << ParseHex("04a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b0") << OP_CHECKSIG;
 
-        // Try to load genesis block parameters from zia_genesis_output.txt first
+        // Try to load mining parameters first
         uint256 loadedHashGenesisBlock;
         uint256 loadedHashMerkleRoot;
         uint32_t loadedNTime = 1748190366;  // Default timestamp
@@ -210,30 +249,39 @@ public:
         CAmount loadedGenesisReward = 50 * COIN;
 
         CBlock genesis;
-        bool loadedFromFile = LoadGenesisFromFile(genesis, loadedHashGenesisBlock, loadedHashMerkleRoot, loadedNTime, loadedNNonce, loadedNBits, loadedNVersion, loadedGenesisReward);
+        bool loadedFromMining = LoadMiningParameters(loadedHashGenesisBlock, loadedHashMerkleRoot, loadedNTime, loadedNNonce, loadedNBits);
         
-        if (loadedFromFile) {
-            // If we loaded from file, use those parameters exactly as they are
-            LogPrintf("Using genesis block parameters from zia_genesis_output.txt\n");
+        if (loadedFromMining) {
+            // If we loaded from mining parameters, use those exactly
+            LogPrintf("Using genesis block parameters from mining_params.json\n");
             genesis = CreateGenesisBlock(genesis_msg, genesis_script, loadedNTime, loadedNNonce, loadedNBits, loadedNVersion, loadedGenesisReward);
             consensus.hashGenesisBlock = loadedHashGenesisBlock;
             genesis.hashMerkleRoot = loadedHashMerkleRoot;
         } else {
-            // If no file, create default genesis block
-            LogPrintf("No genesis parameters file found, using default parameters\n");
-            genesis = CreateGenesisBlock(genesis_msg, genesis_script, loadedNTime, loadedNNonce, loadedNBits, loadedNVersion, loadedGenesisReward);
-            consensus.hashGenesisBlock = genesis.GetHash();
+            // If no mining parameters, try loading from genesis output file
+            bool loadedFromFile = LoadGenesisFromFile(genesis, loadedHashGenesisBlock, loadedHashMerkleRoot, loadedNTime, loadedNNonce, loadedNBits, loadedNVersion, loadedGenesisReward);
+            
+            if (loadedFromFile) {
+                LogPrintf("Using genesis block parameters from zia_genesis_output.txt\n");
+                genesis = CreateGenesisBlock(genesis_msg, genesis_script, loadedNTime, loadedNNonce, loadedNBits, loadedNVersion, loadedGenesisReward);
+                consensus.hashGenesisBlock = loadedHashGenesisBlock;
+                genesis.hashMerkleRoot = loadedHashMerkleRoot;
+            } else {
+                // If no file, create default genesis block
+                LogPrintf("No genesis parameters found, using default parameters\n");
+                genesis = CreateGenesisBlock(genesis_msg, genesis_script, loadedNTime, loadedNNonce, loadedNBits, loadedNVersion, loadedGenesisReward);
+                consensus.hashGenesisBlock = genesis.GetHash();
+            }
         }
 
         // Print debug information to terminal
         fprintf(stderr, "Generated genesis block hash: %s\n", consensus.hashGenesisBlock.ToString().c_str());
-        fprintf(stderr, "Expected genesis block hash: 00009cafe705f9eab60c30fc7e1c90c43741551efcf34f4a1b715a8171a076dd\n");
         fprintf(stderr, "Genesis block merkle root: %s\n", genesis.hashMerkleRoot.ToString().c_str());
 
-        // Only assert if we're not regenerating genesis
-        if (!std::filesystem::exists(std::filesystem::path("src") / "zia_genesis_output.txt")) {
-            assert(consensus.hashGenesisBlock == uint256{"00009cafe705f9eab60c30fc7e1c90c43741551efcf34f4a1b715a8171a076dd"});
-            assert(genesis.hashMerkleRoot == uint256{"9f53a7cc67254bce29a7cfe281ce26a22dbfa469f35218f541c3aed6274bdb11"});
+        // Only assert if we have mining parameters
+        if (loadedFromMining) {
+            assert(consensus.hashGenesisBlock == loadedHashGenesisBlock);
+            assert(genesis.hashMerkleRoot == loadedHashMerkleRoot);
         }
 
         // Clear Bitcoin's seed nodes

@@ -4,15 +4,20 @@ set -euo pipefail
 GREEN='\033[0;32m'
 NC='\033[0m'
 
+# Delete zia_genesis_output.txt if it exists and --regen-genesis is passed
+if [[ "$*" == *"--regen-genesis"* ]]; then
+    if [ -f "zia_genesis_output.txt" ]; then
+        rm zia_genesis_output.txt
+        echo "Deleted existing zia_genesis_output.txt"
+    fi
+    echo -e "🧬 Regenerating genesis block (DEV MODE)..."
+    python3 genesis.py
+else
+    echo -e "🧬 Using existing genesis block parameters."
+fi
+
 echo -e "🧹 Cleaning old build files..."
 rm -rf build
-
-if [[ "${1:-}" == "--regen-genesis" ]]; then
-  echo -e "🧬 Regenerating genesis block (DEV MODE)..."
-  python3 genesis.py
-else
-  echo -e "🧬 Skipping genesis block generation (already hardcoded)."
-fi
 
 echo -e "⚙️ Configuring build with CMake..."
 cmake -B build \
@@ -32,3 +37,4 @@ cp word.csv build/bin/
 echo -e "${GREEN}Setup complete!${NC}"
 echo -e "To run the CLI: ${GREEN}./build/bin/ziacoin-cli${NC}"
 echo -e "To run the GUI: ${GREEN}./build/bin/ziacoin-qt${NC}"
+

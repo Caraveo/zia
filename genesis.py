@@ -10,13 +10,16 @@ import binascii
 import sys
 from datetime import datetime
 import re
+import shutil
+import json
 
 # ======== Custom Network Settings ========
 network_name   = "ZiaCoin Mainnet"
 bech32_prefix  = "zia"
-psz_timestamp  = "The beginning of ZiaCoin - 2025-05-24"
+current_time = int(time.time())
+psz_timestamp  = f"The beginning of ZiaCoin - {datetime.fromtimestamp(current_time).strftime('%Y-%m-%d')}"
 pubkey         = "04a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b0"
-n_time         = 1748190366  # Timestamp: 2025-05-24
+n_time         = current_time  # Current timestamp
 FAST_MINE = True  # Set True for fast mining, False for real difficulty
 
 if FAST_MINE:
@@ -25,9 +28,6 @@ else:
     n_bits = 0x1d00ffff  # Bitcoin mainnet difficulty
 max_nonce      = 0x100000000
 reward         = "00f2052a01000000"  # 50 ZIA in satoshis
-
-# Expected hash (this is what we're trying to match)
-expected_hash = "000000bee2ba836641fea746ef5c8ab612c78c754e2f8fd6a0f592ffb81d6c03"
 
 # Default ports by network
 default_ports = {
@@ -103,10 +103,24 @@ def calculate_genesis_hash(merkle_root, n_time, n_bits, n_nonce):
     hash2 = hashlib.sha256(hash1).digest()
     return hash2[::-1].hex()
 
+# ======== Save Mining Parameters ========
+def save_mining_parameters(hash_hex, nonce, merkle_hex, timestamp, n_bits):
+    mining_params = {
+        'hash': hash_hex,
+        'nonce': nonce,
+        'merkle_root': merkle_hex,
+        'timestamp': timestamp,
+        'n_bits': hex(n_bits),
+        'date': datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+    }
+    
+    with open("mining_params.json", "w") as f:
+        json.dump(mining_params, f, indent=4)
+    print(f"\n📄 Mining parameters saved to mining_params.json")
+
 # ======== Mining Loop ========
 print("🔨 Searching for genesis block...")
-print(f"Timestamp: {n_time}")
-print(f"Expected hash: {expected_hash}")
+print(f"Timestamp: {n_time} ({datetime.fromtimestamp(n_time).strftime('%Y-%m-%d %H:%M:%S')})")
 
 coinbase_tx = create_coinbase_tx()
 tx_hash = hashlib.sha256(hashlib.sha256(coinbase_tx).digest()).digest()
@@ -118,12 +132,13 @@ print(f"[DEBUG] Merkle from fresh tx: {merkle[::-1].hex()}")
 genesis_nonce = 0
 hash_hex = ""
 
-timestamps = [
-    1748190366, 1748103966, 1748017566, 1747931166, 1747844766,
-]
+# Try current time and a few minutes before
+timestamps = [current_time]
+for i in range(1, 6):
+    timestamps.append(current_time - (i * 600))  # Try 10 minutes before each time
 
 for timestamp in timestamps:
-    print(f"\nTrying timestamp: {timestamp}")
+    print(f"\nTrying timestamp: {timestamp} ({datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')})")
     n_time = timestamp
     
     for nonce in range(max_nonce):
@@ -134,8 +149,8 @@ for timestamp in timestamps:
                 genesis_nonce = nonce
                 break
         else:
-            if hash_hex == expected_hash:
-                print("✅ Found matching hash!")
+            if hash_hex.startswith("000000"):
+                print(f"✅ Found valid hash: {hash_hex} at nonce {nonce}")
                 genesis_nonce = nonce
                 break
         if nonce % 1000000 == 0:
@@ -145,10 +160,17 @@ for timestamp in timestamps:
         break
 
 if genesis_nonce == 0:
-    print("❌ Could not find matching hash. Try adjusting timestamp or other parameters.")
+    print("❌ Could not find valid hash. Try adjusting timestamp or other parameters.")
     sys.exit(1)
 
 print(f"\nMining completed. Used difficulty: {hex(n_bits)}")
+print(f"Final hash: {hash_hex}")
+print(f"Final nonce: {genesis_nonce}")
+print(f"Final merkle root: {merkle_hex}")
+print(f"Final timestamp: {n_time} ({datetime.fromtimestamp(n_time).strftime('%Y-%m-%d %H:%M:%S')})")
+
+# Save the mining parameters
+save_mining_parameters(hash_hex, genesis_nonce, merkle_hex, n_time, n_bits)
 
 # ======== Output Final Config ========
 print("\n=== ZiaCoin Genesis Block (C++ formatted) ===")
@@ -335,6 +357,8 @@ def main():
     assert(consensus.hashGenesisBlock == uint256{{"{result['hash']}"}});
     assert(genesis.hashMerkleRoot == uint256{{"{result['merkle_root']}"}});
     """)
+
+    shutil.copy("zia_genesis_output.txt", "src/zia_genesis_output.txt")
 
 if __name__ == '__main__':
     main()
