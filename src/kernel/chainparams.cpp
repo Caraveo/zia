@@ -25,6 +25,10 @@
 #include <cstdint>
 #include <cstring>
 #include <type_traits>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <filesystem>
 
 using namespace util::hex_literals;
 
@@ -58,22 +62,49 @@ static CBlock CreateGenesisBlock(const char* pszTimestamp, const CScript& genesi
     return genesis;
 }
 
-/**
- * Build the genesis block. Note that the output of its generation
- * transaction cannot be spent since it did not originally exist in the
- * database.
- *
- * CBlock(hash=000000000019d6, ver=1, hashPrevBlock=00000000000000, hashMerkleRoot=4a5e1e, nTime=1231006505, nBits=1d00ffff, nNonce=2083236893, vtx=1)
- *   CTransaction(hash=4a5e1e, ver=1, vin.size=1, vout.size=1, nLockTime=0)
- *     CTxIn(COutPoint(000000, -1), coinbase 04ffff001d0104455468652054696d65732030332f4a616e2f32303039204368616e63656c6c6f72206f6e206272696e6b206f66207365636f6e64206261696c6f757420666f722062616e6b73)
- *     CTxOut(nValue=50.00000000, scriptPubKey=0x5F1DF16B2B704C8A578D0B)
- *   vMerkleTree: 4a5e1e
- */
-static CBlock CreateGenesisBlock(uint32_t nTime, uint32_t nNonce, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward)
+// New function to load genesis block parameters from zia_genesis_output.txt if it exists
+static bool LoadGenesisFromFile(CBlock& genesis, uint256& hashGenesisBlock, uint256& hashMerkleRoot, uint32_t& nTime, uint32_t& nNonce, uint32_t& nBits, int32_t& nVersion, CAmount& genesisReward)
 {
-    const char* pszTimestamp = "03/May/2024 ZiaCoin Network Launch";
-    const CScript genesisOutputScript = CScript() << ParseHex("04a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b") << OP_CHECKSIG;
-    return CreateGenesisBlock(pszTimestamp, genesisOutputScript, nTime, nNonce, nBits, nVersion, genesisReward);
+    std::filesystem::path genesisPath = std::filesystem::path("src") / "zia_genesis_output.txt";
+    if (!std::filesystem::exists(genesisPath)) {
+        LogPrintf("Warning: zia_genesis_output.txt not found in src directory. Using default genesis block.\n");
+        return false;
+    }
+
+    std::ifstream file(genesisPath);
+    if (!file.is_open()) {
+        LogPrintf("Warning: Failed to open zia_genesis_output.txt. Using default genesis block.\n");
+        return false;
+    }
+
+    std::string line;
+    while (std::getline(file, line)) {
+        if (line.find("hashGenesisBlock") != std::string::npos) {
+            std::string hashStr = line.substr(line.find("uint256{") + 8, 64);
+            hashGenesisBlock = uint256S(hashStr);
+        } else if (line.find("hashMerkleRoot") != std::string::npos) {
+            std::string merkleStr = line.substr(line.find("uint256{") + 8, 64);
+            hashMerkleRoot = uint256S(merkleStr);
+        } else if (line.find("nTime") != std::string::npos) {
+            std::string timeStr = line.substr(line.find("=") + 1);
+            nTime = std::stoul(timeStr);
+        } else if (line.find("nNonce") != std::string::npos) {
+            std::string nonceStr = line.substr(line.find("=") + 1);
+            nNonce = std::stoul(nonceStr);
+        } else if (line.find("nBits") != std::string::npos) {
+            std::string bitsStr = line.substr(line.find("0x") + 2);
+            nBits = std::stoul(bitsStr, nullptr, 16);
+        } else if (line.find("nVersion") != std::string::npos) {
+            std::string versionStr = line.substr(line.find("=") + 1);
+            nVersion = std::stoi(versionStr);
+        } else if (line.find("genesisReward") != std::string::npos) {
+            std::string rewardStr = line.substr(line.find("=") + 1);
+            genesisReward = std::stoll(rewardStr);
+        }
+    }
+
+    LogPrintf("Loaded genesis block parameters from zia_genesis_output.txt\n");
+    return true;
 }
 
 /**
@@ -126,15 +157,16 @@ public:
         const char* genesis_msg = "The beginning of ZiaCoin - 2025-05-24";
         const CScript genesis_script = CScript() << ParseHex("04a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b0") << OP_CHECKSIG;
         
-        // Build scriptSig to match genesis.py
-        std::vector<unsigned char> scriptSigVec(genesis_msg, genesis_msg + strlen(genesis_msg));
-        CScript scriptSig = CScript() << scriptSigVec;
+        // Build scriptSig to match genesis.py exactly (length byte + message bytes)
+        std::vector<unsigned char> scriptSigVec;
+        scriptSigVec.push_back(static_cast<unsigned char>(strlen(genesis_msg)));  // Length byte
+        scriptSigVec.insert(scriptSigVec.end(), genesis_msg, genesis_msg + strlen(genesis_msg));  // Message bytes
         
         CMutableTransaction txNew;
         txNew.version = 1;
         txNew.vin.resize(1);
         txNew.vout.resize(1);
-        txNew.vin[0].scriptSig = scriptSig;
+        txNew.vin[0].scriptSig = CScript() << scriptSigVec;
         txNew.vout[0].nValue = 50 * COIN;
         txNew.vout[0].scriptPubKey = genesis_script;
         
@@ -178,6 +210,36 @@ public:
             0,
             0
         };
+
+        // Try to load genesis block parameters from zia_genesis_output.txt
+        uint256 loadedHashGenesisBlock;
+        uint256 loadedHashMerkleRoot;
+        uint32_t loadedNTime = genesis.nTime;
+        uint32_t loadedNNonce = genesis.nNonce;
+        uint32_t loadedNBits = genesis.nBits;
+        int32_t loadedNVersion = genesis.nVersion;
+        CAmount loadedGenesisReward = 50 * COIN;
+
+        if (LoadGenesisFromFile(genesis, loadedHashGenesisBlock, loadedHashMerkleRoot, loadedNTime, loadedNNonce, loadedNBits, loadedNVersion, loadedGenesisReward)) {
+            // Create new transaction with updated values
+            CMutableTransaction txNew;
+            txNew.version = 1;
+            txNew.vin.resize(1);
+            txNew.vout.resize(1);
+            txNew.vin[0].scriptSig = genesis.vtx[0]->vin[0].scriptSig;
+            txNew.vout[0].nValue = loadedGenesisReward;
+            txNew.vout[0].scriptPubKey = genesis.vtx[0]->vout[0].scriptPubKey;
+
+            // Update genesis block with loaded parameters
+            genesis.nTime = loadedNTime;
+            genesis.nNonce = loadedNNonce;
+            genesis.nBits = loadedNBits;
+            genesis.nVersion = loadedNVersion;
+            genesis.vtx.clear();
+            genesis.vtx.push_back(MakeTransactionRef(std::move(txNew)));
+            genesis.hashMerkleRoot = loadedHashMerkleRoot;
+            consensus.hashGenesisBlock = loadedHashGenesisBlock;
+        }
     }
 };
 
