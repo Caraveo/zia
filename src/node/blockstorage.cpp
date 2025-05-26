@@ -35,11 +35,28 @@
 #include <util/strencodings.h>
 #include <util/translation.h>
 #include <validation.h>
-#include <util/system.h>
+#include <common/system.h>
+#include <common/args.h>
+#include <node/blockfilter.h>
+#include <node/chainstate.h>
+#include <node/context.h>
+#include <node/interface_ui.h>
+#include <node/validation_interface_args.h>
 
 #include <cstddef>
 #include <map>
 #include <unordered_map>
+
+namespace node {
+
+// Forward declaration
+static fs::path GetBlocksDir();
+
+// Function definition
+static fs::path GetBlocksDir()
+{
+    return gArgs.GetDataDirNet() / "blocks";
+}
 
 namespace kernel {
 static constexpr uint8_t DB_BLOCK_FILES{'f'};
@@ -1283,10 +1300,5 @@ std::ostream& operator<<(std::ostream& os, const BlockfileType& type) {
 std::ostream& operator<<(std::ostream& os, const BlockfileCursor& cursor) {
     os << strprintf("BlockfileCursor(file_num=%d, undo_height=%d)", cursor.file_num, cursor.undo_height);
     return os;
-}
-
-static fs::path GetBlocksDir()
-{
-    return gArgs.GetDataDirNet() / "blocks";
 }
 } // namespace node
