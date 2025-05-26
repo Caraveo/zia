@@ -221,68 +221,44 @@ show_progress() {
     local pid=$1
     local message=$2
     local stage=$3
-    local delay=0.1
-    local spinstr='|/-\'
     local log_file="/tmp/build_progress_$$.log"
     TEMP_FILES+=("$log_file")
     
-    # Set color based on stage
-    local color=$BLUE
-    if [ "$stage" = "config" ]; then
-        color="${BLINK}${YELLOW}"
-    elif [ "$stage" = "build" ]; then
-        color="${BLINK}${ORANGE}"
-    fi
-    
     # Start monitoring the process output
     if [ "$stage" = "build" ]; then
-        # Create a temporary log file
         touch "$log_file"
-        # Start monitoring the process output in background
         while true; do
             if [ -f "$log_file" ]; then
-                # Look for percentage in various formats
-                local percent=$(grep -E '[0-9]|[0-9]+ percent|[0-9]+% complete' "$log_file" | tail -n1 | sed -E 's/.*([0-9]+).*/\1/')
-                if [ ! -z "$percent" ]; then
-                    # Just keep monitoring but don't display the number
-                    sleep 3
+                local last_line=$(tail -n 1 "$log_file")
+                if [ ! -z "$last_line" ]; then
+                    printf "\r\033[K%s" "$last_line"
                 fi
             fi
-            sleep 3
+            sleep 0.1
         done &
         CLEANUP_PIDS+=($!)
     fi
     
     while ps -p $pid > /dev/null; do
-        # Update spinner
-        local temp=${spinstr#?}
-        printf "\r${color}%s [%c]${NC}" "$message" "$spinstr"
-        local spinstr=$temp${spinstr%"$temp"}
-        
-        # Sleep for animation
-        sleep $delay
+        sleep 0.1
     done
     
-    printf "\r${GREEN}%s [✓]${NC}\n" "$message"
+    printf "\n"
 }
 
 # Function to regenerate genesis block
 regenerate_genesis() {
     log "INFO" "Regenerating genesis block..."
     
-    # Run genesis generation in background
     ./run.sh --regen-genesis > /tmp/genesis_output.log 2>&1 &
     local genesis_pid=$!
     CLEANUP_PIDS+=($genesis_pid)
     
-    # Monitor the process
-    local timeout=300  # 5 minutes timeout
+    local timeout=300
     local start_time=$(date +%s)
     
     while true; do
-        # Check if process is still running
         if ! ps -p $genesis_pid > /dev/null; then
-            # Process finished, check exit status
             wait $genesis_pid
             local exit_status=$?
             if [ $exit_status -eq 0 ]; then
@@ -294,7 +270,6 @@ regenerate_genesis() {
             fi
         fi
         
-        # Check for timeout
         local current_time=$(date +%s)
         local elapsed=$((current_time - start_time))
         if [ $elapsed -gt $timeout ]; then
@@ -303,8 +278,13 @@ regenerate_genesis() {
             return 1
         fi
         
-        # Show progress
-        echo -ne "\r${YELLOW}Configuring Genesis Block [${spinstr:i++%${#spinstr}:1}]${NC}"
+        if [ -f /tmp/genesis_output.log ]; then
+            local last_line=$(tail -n 1 /tmp/genesis_output.log)
+            if [ ! -z "$last_line" ]; then
+                printf "\r\033[K%s" "$last_line"
+            fi
+        fi
+        
         sleep 0.1
     done
 }
