@@ -117,7 +117,7 @@ public:
         pchMessageStart[1] = 0x69; // i
         pchMessageStart[2] = 0x61; // a
         pchMessageStart[3] = 0x43; // C
-        nDefaultPort = 8334;
+        nDefaultPort = 38832;
         nPruneAfterHeight = 100000;
         m_assumed_blockchain_size = 1;
         m_assumed_chain_state_size = 1;
@@ -129,11 +129,11 @@ public:
         CBlock genesis = CreateGenesisBlock(
             genesis_msg,
             genesis_script,
-            1748190366,  // nTime
-            16389,       // nNonce
-            0x207fffff,  // nBits
-            1,           // nVersion
-            50 * COIN    // genesisReward
+            1748190366,    // Timestamp: 2025-05-24
+            16389,         // Nonce
+            0x207fffff,    // nBits
+            1,             // nVersion
+            50 * COIN      // genesisReward
         );
         
         consensus.hashGenesisBlock = genesis.GetHash();
@@ -142,10 +142,6 @@ public:
         fprintf(stderr, "Generated genesis block hash: %s\n", consensus.hashGenesisBlock.ToString().c_str());
         fprintf(stderr, "Expected genesis block hash: 00009cafe705f9eab60c30fc7e1c90c43741551efcf34f4a1b715a8171a076dd\n");
         fprintf(stderr, "Genesis block merkle root: %s\n", genesis.hashMerkleRoot.ToString().c_str());
-        
-        LogPrintf("Generated genesis block hash: %s\n", consensus.hashGenesisBlock.ToString());
-        LogPrintf("Expected genesis block hash: 00009cafe705f9eab60c30fc7e1c90c43741551efcf34f4a1b715a8171a076dd\n");
-        LogPrintf("Genesis block merkle root: %s\n", genesis.hashMerkleRoot.ToString());
         
         assert(consensus.hashGenesisBlock == uint256{"00009cafe705f9eab60c30fc7e1c90c43741551efcf34f4a1b715a8171a076dd"});
         assert(genesis.hashMerkleRoot == uint256{"9f53a7cc67254bce29a7cfe281ce26a22dbfa469f35218f541c3aed6274bdb11"});
