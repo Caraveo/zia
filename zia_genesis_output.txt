@@ -6,15 +6,15 @@ const CScript genesis_script = CScript() << ParseHex("04a5e1e4baab89f3a32518a88c
 CBlock genesis = CreateGenesisBlock(
     genesis_msg,
     genesis_script,
-    1748264489,    // Timestamp: 2025-05-26
-    107431,   // Nonce
+    1748266632,    // Timestamp: 2025-05-26
+    36609,   // Nonce
     0x207fffff, // nBits
     1,          // nVersion
     50 * COIN   // genesisReward
 );
 
 consensus.hashGenesisBlock = genesis.GetHash();
-assert(consensus.hashGenesisBlock == uint256{"0000e23a88369df5b85d042e038680700924667c1a3780fbef4416da62e661ea"});
+assert(consensus.hashGenesisBlock == uint256{"0000bd09b265eb539c6078fa2e65d11f5b9ca87ff6270f6c3cbc000d5e9e9b95"});
 assert(genesis.hashMerkleRoot == uint256{"cd876e014d18f9e803e08865bab32f1a79943fcd0f189ae3e9e4e370568b9a43"});
 bech32_hrp = "zia";
 

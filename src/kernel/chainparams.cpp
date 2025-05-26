@@ -80,6 +80,9 @@ static bool LoadGenesisFromFile(CBlock& genesis, uint256& hashGenesisBlock, uint
     }
 
     std::string line;
+    bool foundGenesisBlock = false;
+    bool foundMerkleRoot = false;
+
     while (std::getline(file, line)) {
         // Skip comments and empty lines
         if (line.empty() || line.find("//") == 0) continue;
@@ -89,67 +92,63 @@ static bool LoadGenesisFromFile(CBlock& genesis, uint256& hashGenesisBlock, uint
             std::vector<unsigned char> hashBytes = ParseHex(hashStr);
             if (hashBytes.size() == 32) {
                 hashGenesisBlock = uint256(hashBytes);
+                foundGenesisBlock = true;
             }
         } else if (line.find("genesis.hashMerkleRoot") != std::string::npos) {
             std::string merkleStr = line.substr(line.find("uint256{") + 8, 64);
             std::vector<unsigned char> merkleBytes = ParseHex(merkleStr);
             if (merkleBytes.size() == 32) {
                 hashMerkleRoot = uint256(merkleBytes);
+                foundMerkleRoot = true;
             }
-        } else if (line.find("Timestamp:") != std::string::npos) {
-            // Extract timestamp from comment
-            size_t pos = line.find("// Timestamp:") + 13;
-            while (pos < line.length() && std::isspace(line[pos])) pos++;
-            std::string timeStr = line.substr(pos);
-            try {
-                nTime = std::stoul(timeStr);
-            } catch (const std::exception& e) {
-                LogPrintf("Warning: Failed to parse timestamp: %s\n", e.what());
-            }
-        } else if (line.find("Nonce") != std::string::npos) {
-            // Extract nonce from CreateGenesisBlock parameters
-            size_t pos = line.find(",");
-            if (pos != std::string::npos) {
-                pos++;
-                while (pos < line.length() && std::isspace(line[pos])) pos++;
-                std::string nonceStr = line.substr(pos);
+        } else if (line.find("CreateGenesisBlock") != std::string::npos) {
+            // Extract parameters from CreateGenesisBlock
+            std::string params = line.substr(line.find("(") + 1);
+            std::istringstream iss(params);
+            std::string param;
+            int paramIndex = 0;
+            
+            while (std::getline(iss, param, ',')) {
+                param = param.substr(0, param.find("//")); // Remove comments
+                param.erase(0, param.find_first_not_of(" \t")); // Trim leading whitespace
+                param.erase(param.find_last_not_of(" \t") + 1); // Trim trailing whitespace
+                
                 try {
-                    nNonce = std::stoul(nonceStr);
+                    switch (paramIndex) {
+                        case 2: // Timestamp
+                            nTime = std::stoul(param);
+                            break;
+                        case 3: // Nonce
+                            nNonce = std::stoul(param);
+                            break;
+                        case 4: // nBits
+                            if (param.find("0x") != std::string::npos) {
+                                nBits = std::stoul(param.substr(2), nullptr, 16);
+                            }
+                            break;
+                        case 5: // nVersion
+                            nVersion = std::stoi(param);
+                            break;
+                        case 6: // genesisReward
+                            if (param.find("COIN") != std::string::npos) {
+                                genesisReward = 50 * COIN;
+                            }
+                            break;
+                    }
                 } catch (const std::exception& e) {
-                    LogPrintf("Warning: Failed to parse nonce: %s\n", e.what());
+                    LogPrintf("Warning: Failed to parse parameter %d: %s\n", paramIndex, e.what());
                 }
+                paramIndex++;
             }
-        } else if (line.find("nBits") != std::string::npos) {
-            // Extract nBits from hex value
-            size_t pos = line.find("0x");
-            if (pos != std::string::npos) {
-                std::string bitsStr = line.substr(pos + 2);
-                try {
-                    nBits = std::stoul(bitsStr, nullptr, 16);
-                } catch (const std::exception& e) {
-                    LogPrintf("Warning: Failed to parse nBits: %s\n", e.what());
-                }
-            }
-        } else if (line.find("nVersion") != std::string::npos) {
-            // Extract version from CreateGenesisBlock parameters
-            size_t pos = line.find(",");
-            if (pos != std::string::npos) {
-                pos++;
-                while (pos < line.length() && std::isspace(line[pos])) pos++;
-                std::string versionStr = line.substr(pos);
-                try {
-                    nVersion = std::stoi(versionStr);
-                } catch (const std::exception& e) {
-                    LogPrintf("Warning: Failed to parse version: %s\n", e.what());
-                }
-            }
-        } else if (line.find("genesisReward") != std::string::npos) {
-            genesisReward = 50 * COIN;
         }
     }
 
-    LogPrintf("Loaded genesis block parameters from zia_genesis_output.txt\n");
-    return true;
+    if (foundGenesisBlock && foundMerkleRoot) {
+        LogPrintf("Successfully loaded genesis block parameters from zia_genesis_output.txt\n");
+        return true;
+    }
+    
+    return false;
 }
 
 // New function to load genesis block parameters from mining_params.json
@@ -250,36 +249,34 @@ public:
 
         CBlock genesis;
         bool loadedFromMining = LoadMiningParameters(loadedHashGenesisBlock, loadedHashMerkleRoot, loadedNTime, loadedNNonce, loadedNBits);
+        bool loadedFromFile = false;
         
-        if (loadedFromMining) {
-            // If we loaded from mining parameters, use those exactly
-            LogPrintf("Using genesis block parameters from mining_params.json\n");
+        if (!loadedFromMining) {
+            // If no mining parameters, try loading from genesis output file
+            loadedFromFile = LoadGenesisFromFile(genesis, loadedHashGenesisBlock, loadedHashMerkleRoot, loadedNTime, loadedNNonce, loadedNBits, loadedNVersion, loadedGenesisReward);
+        }
+        
+        if (loadedFromMining || loadedFromFile) {
+            // If we loaded from either source, use those parameters
+            LogPrintf("Using genesis block parameters from %s\n", loadedFromMining ? "mining_params.json" : "zia_genesis_output.txt");
             genesis = CreateGenesisBlock(genesis_msg, genesis_script, loadedNTime, loadedNNonce, loadedNBits, loadedNVersion, loadedGenesisReward);
             consensus.hashGenesisBlock = loadedHashGenesisBlock;
             genesis.hashMerkleRoot = loadedHashMerkleRoot;
         } else {
-            // If no mining parameters, try loading from genesis output file
-            bool loadedFromFile = LoadGenesisFromFile(genesis, loadedHashGenesisBlock, loadedHashMerkleRoot, loadedNTime, loadedNNonce, loadedNBits, loadedNVersion, loadedGenesisReward);
-            
-            if (loadedFromFile) {
-                LogPrintf("Using genesis block parameters from zia_genesis_output.txt\n");
-                genesis = CreateGenesisBlock(genesis_msg, genesis_script, loadedNTime, loadedNNonce, loadedNBits, loadedNVersion, loadedGenesisReward);
-                consensus.hashGenesisBlock = loadedHashGenesisBlock;
-                genesis.hashMerkleRoot = loadedHashMerkleRoot;
-            } else {
-                // If no file, create default genesis block
-                LogPrintf("No genesis parameters found, using default parameters\n");
-                genesis = CreateGenesisBlock(genesis_msg, genesis_script, loadedNTime, loadedNNonce, loadedNBits, loadedNVersion, loadedGenesisReward);
-                consensus.hashGenesisBlock = genesis.GetHash();
-            }
+            // If no parameters found, create default genesis block
+            LogPrintf("No genesis parameters found, using default parameters\n");
+            genesis = CreateGenesisBlock(genesis_msg, genesis_script, loadedNTime, loadedNNonce, loadedNBits, loadedNVersion, loadedGenesisReward);
+            consensus.hashGenesisBlock = genesis.GetHash();
         }
 
         // Print debug information to terminal
-        fprintf(stderr, "Generated genesis block hash: %s\n", consensus.hashGenesisBlock.ToString().c_str());
-        fprintf(stderr, "Genesis block merkle root: %s\n", genesis.hashMerkleRoot.ToString().c_str());
+        std::string genesisHashStr = consensus.hashGenesisBlock.ToString();
+        std::string merkleRootStr = genesis.hashMerkleRoot.ToString();
+        LogPrintf("Generated genesis block hash: %s\n", genesisHashStr);
+        LogPrintf("Genesis block merkle root: %s\n", merkleRootStr);
 
-        // Only assert if we have mining parameters
-        if (loadedFromMining) {
+        // Only assert if we have parameters from either source
+        if (loadedFromMining || loadedFromFile) {
             assert(consensus.hashGenesisBlock == loadedHashGenesisBlock);
             assert(genesis.hashMerkleRoot == loadedHashMerkleRoot);
         }
