@@ -37,7 +37,7 @@
 #include <validation.h>
 #include <common/system.h>
 #include <common/args.h>
-#include <node/blockfilter.h>
+#include <index/blockfilter.h>
 #include <node/chainstate.h>
 #include <node/context.h>
 #include <node/interface_ui.h>
