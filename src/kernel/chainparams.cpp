@@ -79,27 +79,36 @@ static bool LoadGenesisFromFile(CBlock& genesis, uint256& hashGenesisBlock, uint
 
     std::string line;
     while (std::getline(file, line)) {
-        if (line.find("hashGenesisBlock") != std::string::npos) {
+        // Skip comments and empty lines
+        if (line.empty() || line.find("//") == 0) continue;
+
+        if (line.find("consensus.hashGenesisBlock") != std::string::npos) {
             std::string hashStr = line.substr(line.find("uint256{") + 8, 64);
-            hashGenesisBlock = uint256(ParseHex(hashStr));
-        } else if (line.find("hashMerkleRoot") != std::string::npos) {
+            std::vector<unsigned char> hashBytes = ParseHex(hashStr);
+            if (hashBytes.size() == 32) {
+                hashGenesisBlock = uint256(hashBytes);
+            }
+        } else if (line.find("genesis.hashMerkleRoot") != std::string::npos) {
             std::string merkleStr = line.substr(line.find("uint256{") + 8, 64);
-            hashMerkleRoot = uint256(ParseHex(merkleStr));
-        } else if (line.find("nTime") != std::string::npos) {
-            std::string timeStr = line.substr(line.find("=") + 1);
+            std::vector<unsigned char> merkleBytes = ParseHex(merkleStr);
+            if (merkleBytes.size() == 32) {
+                hashMerkleRoot = uint256(merkleBytes);
+            }
+        } else if (line.find("Timestamp:") != std::string::npos) {
+            std::string timeStr = line.substr(line.find("// Timestamp:") + 13);
             nTime = std::stoul(timeStr);
-        } else if (line.find("nNonce") != std::string::npos) {
-            std::string nonceStr = line.substr(line.find("=") + 1);
+        } else if (line.find("Nonce") != std::string::npos) {
+            std::string nonceStr = line.substr(line.find(",") + 1);
             nNonce = std::stoul(nonceStr);
         } else if (line.find("nBits") != std::string::npos) {
             std::string bitsStr = line.substr(line.find("0x") + 2);
             nBits = std::stoul(bitsStr, nullptr, 16);
         } else if (line.find("nVersion") != std::string::npos) {
-            std::string versionStr = line.substr(line.find("=") + 1);
+            std::string versionStr = line.substr(line.find(",") + 1);
             nVersion = std::stoi(versionStr);
         } else if (line.find("genesisReward") != std::string::npos) {
-            std::string rewardStr = line.substr(line.find("=") + 1);
-            genesisReward = std::stoll(rewardStr);
+            std::string rewardStr = line.substr(line.find("50 * COIN") + 9);
+            genesisReward = 50 * COIN;
         }
     }
 
