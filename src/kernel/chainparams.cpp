@@ -95,19 +95,53 @@ static bool LoadGenesisFromFile(CBlock& genesis, uint256& hashGenesisBlock, uint
                 hashMerkleRoot = uint256(merkleBytes);
             }
         } else if (line.find("Timestamp:") != std::string::npos) {
-            std::string timeStr = line.substr(line.find("// Timestamp:") + 13);
-            nTime = std::stoul(timeStr);
+            // Extract timestamp from comment
+            size_t pos = line.find("// Timestamp:") + 13;
+            while (pos < line.length() && std::isspace(line[pos])) pos++;
+            std::string timeStr = line.substr(pos);
+            try {
+                nTime = std::stoul(timeStr);
+            } catch (const std::exception& e) {
+                LogPrintf("Warning: Failed to parse timestamp: %s\n", e.what());
+            }
         } else if (line.find("Nonce") != std::string::npos) {
-            std::string nonceStr = line.substr(line.find(",") + 1);
-            nNonce = std::stoul(nonceStr);
+            // Extract nonce from CreateGenesisBlock parameters
+            size_t pos = line.find(",");
+            if (pos != std::string::npos) {
+                pos++;
+                while (pos < line.length() && std::isspace(line[pos])) pos++;
+                std::string nonceStr = line.substr(pos);
+                try {
+                    nNonce = std::stoul(nonceStr);
+                } catch (const std::exception& e) {
+                    LogPrintf("Warning: Failed to parse nonce: %s\n", e.what());
+                }
+            }
         } else if (line.find("nBits") != std::string::npos) {
-            std::string bitsStr = line.substr(line.find("0x") + 2);
-            nBits = std::stoul(bitsStr, nullptr, 16);
+            // Extract nBits from hex value
+            size_t pos = line.find("0x");
+            if (pos != std::string::npos) {
+                std::string bitsStr = line.substr(pos + 2);
+                try {
+                    nBits = std::stoul(bitsStr, nullptr, 16);
+                } catch (const std::exception& e) {
+                    LogPrintf("Warning: Failed to parse nBits: %s\n", e.what());
+                }
+            }
         } else if (line.find("nVersion") != std::string::npos) {
-            std::string versionStr = line.substr(line.find(",") + 1);
-            nVersion = std::stoi(versionStr);
+            // Extract version from CreateGenesisBlock parameters
+            size_t pos = line.find(",");
+            if (pos != std::string::npos) {
+                pos++;
+                while (pos < line.length() && std::isspace(line[pos])) pos++;
+                std::string versionStr = line.substr(pos);
+                try {
+                    nVersion = std::stoi(versionStr);
+                } catch (const std::exception& e) {
+                    LogPrintf("Warning: Failed to parse version: %s\n", e.what());
+                }
+            }
         } else if (line.find("genesisReward") != std::string::npos) {
-            std::string rewardStr = line.substr(line.find("50 * COIN") + 9);
             genesisReward = 50 * COIN;
         }
     }
