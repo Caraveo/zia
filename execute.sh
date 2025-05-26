@@ -10,12 +10,21 @@ NC='\033[0m' # No Color
 # Log file
 LOG_FILE="zia_cleanup_$(date +%Y%m%d_%H%M%S).log"
 
-# Function to log messages
+# Function to log messages with colors
 log() {
     local level=$1
     local message=$2
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    echo -e "${timestamp} [${level}] ${message}" | tee -a "$LOG_FILE"
+    local color=$NC
+    
+    case $level in
+        "ERROR") color=$RED ;;
+        "SUCCESS") color=$GREEN ;;
+        "WARNING") color=$YELLOW ;;
+        "INFO") color=$BLUE ;;
+    esac
+    
+    echo -e "${timestamp} ${color}[${level}]${NC} ${message}" | tee -a "$LOG_FILE"
 }
 
 # Function to check if a command succeeded
@@ -26,6 +35,30 @@ check_status() {
         log "ERROR" "$2"
         exit 1
     fi
+}
+
+# Function to clean genesis files
+clean_genesis_files() {
+    log "INFO" "Cleaning genesis-related files..."
+    
+    # List of genesis files to remove
+    GENESIS_FILES=(
+        "zia_genesis_output.txt"
+        "mining_params.json"
+        "src/zia_genesis_output.txt"
+    )
+    
+    for file in "${GENESIS_FILES[@]}"; do
+        if [ -f "$file" ]; then
+            log "INFO" "Removing file: $file"
+            rm -f "$file"
+            check_status "Removed $file" "Failed to remove $file"
+        else
+            log "WARNING" "File does not exist: $file"
+        fi
+    done
+    
+    log "SUCCESS" "Genesis files cleanup completed"
 }
 
 # Function to clean blockchain data
@@ -56,7 +89,7 @@ clean_blockchain() {
             rm -rf "$DATA_DIR/$dir"
             check_status "Removed $dir" "Failed to remove $dir"
         else
-            log "INFO" "Directory does not exist: $dir"
+            log "WARNING" "Directory does not exist: $dir"
         fi
     done
     
@@ -67,11 +100,11 @@ clean_blockchain() {
             rm -f "$DATA_DIR/$file"
             check_status "Removed $file" "Failed to remove $file"
         else
-            log "INFO" "File does not exist: $file"
+            log "WARNING" "File does not exist: $file"
         fi
     done
     
-    log "INFO" "Blockchain cleanup completed"
+    log "SUCCESS" "Blockchain cleanup completed"
 }
 
 # Function to regenerate genesis block
@@ -79,6 +112,16 @@ regenerate_genesis() {
     log "INFO" "Regenerating genesis block..."
     ./run.sh --regen-genesis
     check_status "Genesis block regenerated" "Failed to regenerate genesis block"
+    
+    # Verify genesis files were created
+    if [ -f "zia_genesis_output.txt" ] && [ -f "mining_params.json" ]; then
+        log "SUCCESS" "Genesis files created successfully"
+        log "INFO" "Genesis block hash: $(grep -o 'hashGenesisBlock.*' zia_genesis_output.txt)"
+        log "INFO" "Merkle root: $(grep -o 'hashMerkleRoot.*' zia_genesis_output.txt)"
+    else
+        log "ERROR" "Genesis files not created properly"
+        exit 1
+    fi
 }
 
 # Function to rebuild project
@@ -96,6 +139,14 @@ rebuild_project() {
     log "INFO" "Running build script"
     ./run.sh
     check_status "Project rebuilt" "Failed to rebuild project"
+    
+    # Verify build artifacts
+    if [ -f "build/bin/ziacoind" ] && [ -f "build/bin/ziacoin-cli" ]; then
+        log "SUCCESS" "Build artifacts created successfully"
+    else
+        log "ERROR" "Build artifacts not found"
+        exit 1
+    fi
 }
 
 # Function to start daemon
@@ -106,22 +157,35 @@ start_daemon() {
     
     # Wait for daemon to start
     log "INFO" "Waiting for daemon to start..."
-    sleep 5
+    for i in {1..5}; do
+        if pgrep -x "ziacoind" > /dev/null; then
+            log "SUCCESS" "Daemon is running"
+            return 0
+        fi
+        log "INFO" "Waiting... ($i/5)"
+        sleep 1
+    done
     
-    # Check if daemon is running
-    if pgrep -x "ziacoind" > /dev/null; then
-        log "INFO" "Daemon is running"
-    else
-        log "ERROR" "Daemon failed to start"
-        exit 1
-    fi
+    log "ERROR" "Daemon failed to start after 5 seconds"
+    exit 1
 }
 
 # Function to check blockchain info
 check_blockchain() {
     log "INFO" "Checking blockchain info..."
-    ./build/bin/ziacoin-cli getblockchaininfo
-    check_status "Blockchain info retrieved" "Failed to get blockchain info"
+    local blockchain_info
+    blockchain_info=$(./build/bin/ziacoin-cli getblockchaininfo)
+    
+    if [ $? -eq 0 ]; then
+        log "SUCCESS" "Blockchain info retrieved"
+        log "INFO" "Blockchain info:"
+        echo "$blockchain_info" | while IFS= read -r line; do
+            log "INFO" "  $line"
+        done
+    else
+        log "ERROR" "Failed to get blockchain info"
+        exit 1
+    fi
 }
 
 # Main execution
@@ -136,13 +200,14 @@ main() {
     fi
     
     # Execute steps
+    clean_genesis_files
     clean_blockchain
     regenerate_genesis
     rebuild_project
     start_daemon
     check_blockchain
     
-    log "INFO" "Process completed successfully"
+    log "SUCCESS" "Process completed successfully"
     log "INFO" "Check $LOG_FILE for detailed logs"
 }
 
