@@ -210,12 +210,17 @@ public:
         CAmount loadedGenesisReward = 50 * COIN;
 
         CBlock genesis;
-        if (LoadGenesisFromFile(genesis, loadedHashGenesisBlock, loadedHashMerkleRoot, loadedNTime, loadedNNonce, loadedNBits, loadedNVersion, loadedGenesisReward)) {
-            // If we loaded from file, use those parameters
+        bool loadedFromFile = LoadGenesisFromFile(genesis, loadedHashGenesisBlock, loadedHashMerkleRoot, loadedNTime, loadedNNonce, loadedNBits, loadedNVersion, loadedGenesisReward);
+        
+        if (loadedFromFile) {
+            // If we loaded from file, use those parameters exactly as they are
+            LogPrintf("Using genesis block parameters from zia_genesis_output.txt\n");
             genesis = CreateGenesisBlock(genesis_msg, genesis_script, loadedNTime, loadedNNonce, loadedNBits, loadedNVersion, loadedGenesisReward);
             consensus.hashGenesisBlock = loadedHashGenesisBlock;
+            genesis.hashMerkleRoot = loadedHashMerkleRoot;
         } else {
             // If no file, create default genesis block
+            LogPrintf("No genesis parameters file found, using default parameters\n");
             genesis = CreateGenesisBlock(genesis_msg, genesis_script, loadedNTime, loadedNNonce, loadedNBits, loadedNVersion, loadedGenesisReward);
             consensus.hashGenesisBlock = genesis.GetHash();
         }
