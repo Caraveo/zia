@@ -35,6 +35,7 @@
 #include <util/strencodings.h>
 #include <util/translation.h>
 #include <validation.h>
+#include <util/system.h>
 
 #include <cstddef>
 #include <map>
@@ -1087,19 +1088,33 @@ FlatFilePos BlockManager::WriteBlock(const CBlock& block, int nHeight)
         LogError("FindNextBlockPos failed for %s while writing block", pos.ToString());
         return FlatFilePos();
     }
+    
+    // Ensure the blocks directory exists
+    fs::path blocksDir = GetBlocksDir();
+    fs::create_directories(blocksDir);
+    
     AutoFile file{OpenBlockFile(pos, /*fReadOnly=*/false)};
     if (file.IsNull()) {
         LogError("OpenBlockFile failed for %s while writing block", pos.ToString());
         m_opts.notifications.fatalError(_("Failed to write block."));
         return FlatFilePos();
     }
+    
+    // Write block header
     BufferedWriter fileout{file};
-
-    // Write index header
     fileout << GetParams().MessageStart() << block_size;
     pos.nPos += STORAGE_HEADER_BYTES;
-    // Write block
+    
+    // Write block data
     fileout << TX_WITH_WITNESS(block);
+    
+    // Ensure the block is written to disk
+    fileout.flush();
+    
+    // Log success
+    LogPrintf("Successfully wrote block %s to disk at position %s\n", 
+              block.GetHash().ToString(), pos.ToString());
+    
     return pos;
 }
 
@@ -1268,5 +1283,10 @@ std::ostream& operator<<(std::ostream& os, const BlockfileType& type) {
 std::ostream& operator<<(std::ostream& os, const BlockfileCursor& cursor) {
     os << strprintf("BlockfileCursor(file_num=%d, undo_height=%d)", cursor.file_num, cursor.undo_height);
     return os;
+}
+
+static fs::path GetBlocksDir()
+{
+    return gArgs.GetDataDirNet() / "blocks";
 }
 } // namespace node
