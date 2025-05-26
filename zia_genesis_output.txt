@@ -1,8 +1,21 @@
 // ZiaCoin Genesis C++ Configuration
-genesis = CreateGenesisBlock("The beginning of ZiaCoin - 2025-05-24", 1748190366, 16389, 0x207fffff, 1, 50 * COIN);
+// Genesis block parameters for ZiaCoin
+const char* genesis_msg = "The beginning of ZiaCoin - 2025-05-24";
+const CScript genesis_script = CScript() << ParseHex("04a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b0") << OP_CHECKSIG;
+
+CBlock genesis = CreateGenesisBlock(
+    genesis_msg,
+    genesis_script,
+    1748190366,    // Timestamp: 2025-05-25
+    16389,   // Nonce
+    0x207fffff, // nBits
+    1,          // nVersion
+    50 * COIN   // genesisReward
+);
+
 consensus.hashGenesisBlock = genesis.GetHash();
-assert(consensus.hashGenesisBlock == uint256S("000000bee2ba836641fea746ef5c8ab612c78c754e2f8fd6a0f592ffb81d6c03"));
-assert(genesis.hashMerkleRoot == uint256S("9f53a7cc67254bce29a7cfe281ce26a22dbfa469f35218f541c3aed6274bdb11"));
+assert(consensus.hashGenesisBlock == uint256{"00009cafe705f9eab60c30fc7e1c90c43741551efcf34f4a1b715a8171a076dd"});
+assert(genesis.hashMerkleRoot == uint256{"9f53a7cc67254bce29a7cfe281ce26a22dbfa469f35218f541c3aed6274bdb11"});
 bech32_hrp = "zia";
 
 // Base58 prefixes

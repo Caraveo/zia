@@ -9,6 +9,7 @@
 #include <common/args.h>
 #include <consensus/params.h>
 #include <deploymentinfo.h>
+#include <kernel/chainparams.h>
 #include <logging.h>
 #include <tinyformat.h>
 #include <util/chaintype.h>
@@ -22,6 +23,7 @@
 #include <vector>
 
 using util::SplitString;
+using namespace Consensus;
 
 void ReadSigNetArgs(const ArgsManager& args, CChainParams::SigNetOptions& options)
 {

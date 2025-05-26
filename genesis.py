@@ -47,48 +47,34 @@ def merkle_root(tx_hashes):
             tx_hashes.append(tx_hashes[-1])
         new_level = []
         for i in range(0, len(tx_hashes), 2):
-            # Double SHA256 and keep in little-endian
             new_hash = hashlib.sha256(hashlib.sha256(tx_hashes[i] + tx_hashes[i+1]).digest()).digest()
             new_level.append(new_hash)
         tx_hashes = new_level
     return tx_hashes[0]
 
 def create_coinbase_tx():
-    # Use the global timestamp variable
     global psz_timestamp
     
-    # Construct the coinbase script
     script_sig_bytes = psz_timestamp.encode('ascii')
-    script_sig = (
-        struct.pack("B", len(script_sig_bytes)) +
-        script_sig_bytes
-    ).hex()
+    script_sig = (struct.pack("B", len(script_sig_bytes)) + script_sig_bytes).hex()
     
-    # Validate pubkey
     if len(pubkey) != 130 or not all(c in '0123456789abcdefABCDEF' for c in pubkey):
         raise ValueError(f"Invalid pubkey: must be 130 hex characters, got {len(pubkey)}. Value: {pubkey}")
     
-    # Construct the output script - using uncompressed pubkey format
-    output_script = "41" + pubkey + "ac"  # Add 41 prefix for compressed pubkey
+    output_script = "41" + pubkey + "ac"
+    reward_le = struct.pack("<Q", 50 * 100000000).hex()
     
-    # Convert reward to little-endian (8 bytes)
-    reward_le = struct.pack("<Q", 50 * 100000000).hex()  # 50 ZIA in satoshis
-    
-    # Construct the full transaction with exact byte ordering
     tx = (
-        "01000000" +  # Version (little-endian)
-        "01" +        # Input count
-        "0000000000000000000000000000000000000000000000000000000000000000" +  # Previous output hash
-        "ffffffff" +  # Previous output index
-        f"{len(script_sig)//2:02x}" + script_sig +  # Script sig length and script
-        "ffffffff" +  # Sequence
-        "01" +        # Output count
-        reward_le +   # Amount in little-endian
-        f"{len(output_script)//2:02x}" + output_script +  # Script length and script
-        "00000000"    # Lock time
+        "01000000" + "01" +
+        "00" * 32 +
+        "ffffffff" +
+        f"{len(script_sig)//2:02x}" + script_sig +
+        "ffffffff" + "01" +
+        reward_le +
+        f"{len(output_script)//2:02x}" + output_script +
+        "00000000"
     )
     
-    # Debug output
     print("\nCoinbase Transaction Details:")
     print(f"Timestamp: {psz_timestamp}")
     print(f"Script Sig Bytes: {len(script_sig_bytes)}")
@@ -98,7 +84,6 @@ def create_coinbase_tx():
     print(f"Reward (LE): {reward_le}")
     print(f"Full TX: {tx}")
     
-    # Convert to bytes and verify the hash
     tx_bytes = bytes.fromhex(tx)
     tx_hash = hashlib.sha256(hashlib.sha256(tx_bytes).digest()).digest()
     print(f"TX Hash: {tx_hash.hex()}")
@@ -106,26 +91,16 @@ def create_coinbase_tx():
     return tx_bytes
 
 def calculate_genesis_hash(merkle_root, n_time, n_bits, n_nonce):
-    # Convert n_bits to target
-    n_size = (n_bits >> 24) & 0xff
-    n_word = n_bits & 0x00ffffff
-    target = n_word << (8 * (n_size - 3))
-    
-    # Create block header
     header = (
-        struct.pack("<L", 1) +  # Version
-        bytes.fromhex("00" * 32) +  # Previous block hash
-        merkle_root +  # Merkle root
-        struct.pack("<L", n_time) +  # Timestamp
-        struct.pack("<L", n_bits) +  # Bits
-        struct.pack("<L", n_nonce)  # Nonce
+        struct.pack("<L", 1) +
+        bytes.fromhex("00" * 32) +
+        merkle_root +
+        struct.pack("<L", n_time) +
+        struct.pack("<L", n_bits) +
+        struct.pack("<L", n_nonce)
     )
-    
-    # Calculate hash
     hash1 = hashlib.sha256(header).digest()
     hash2 = hashlib.sha256(hash1).digest()
-    
-    # Convert to little-endian hex
     return hash2[::-1].hex()
 
 # ======== Mining Loop ========
@@ -133,25 +108,18 @@ print("🔨 Searching for genesis block...")
 print(f"Timestamp: {n_time}")
 print(f"Expected hash: {expected_hash}")
 
-# Generate coinbase transaction and calculate merkle root
 coinbase_tx = create_coinbase_tx()
 tx_hash = hashlib.sha256(hashlib.sha256(coinbase_tx).digest()).digest()
 merkle = merkle_root([tx_hash])
 merkle_hex = merkle.hex()
-
 print(f"\nGenerated Merkle Root: {merkle_hex}")
 print(f"[DEBUG] Merkle from fresh tx: {merkle[::-1].hex()}")
 
-best_hash = "f" * 64
 genesis_nonce = 0
+hash_hex = ""
 
-# Try different timestamps if needed
 timestamps = [
-    1748190366,  # 2025-05-24 00:00:00 UTC
-    1748103966,  # 2025-05-23 00:00:00 UTC
-    1748017566,  # 2025-05-22 00:00:00 UTC
-    1747931166,  # 2025-05-21 00:00:00 UTC
-    1747844766,  # 2025-05-20 00:00:00 UTC
+    1748190366, 1748103966, 1748017566, 1747931166, 1747844766,
 ]
 
 for timestamp in timestamps:
@@ -161,7 +129,6 @@ for timestamp in timestamps:
     for nonce in range(max_nonce):
         hash_hex = calculate_genesis_hash(merkle, n_time, n_bits, nonce)
         if FAST_MINE:
-            # Stop when hash starts with 4 zeros (adjust as you want)
             if hash_hex.startswith("0000"):
                 print(f"✅ Found easy valid hash: {hash_hex} at nonce {nonce}")
                 genesis_nonce = nonce
@@ -186,16 +153,24 @@ print(f"\nMining completed. Used difficulty: {hex(n_bits)}")
 # ======== Output Final Config ========
 print("\n=== ZiaCoin Genesis Block (C++ formatted) ===")
 print(f'// Generated for {network_name}')
-print(f'genesis = CreateGenesisBlock("{psz_timestamp}", {n_time}, {genesis_nonce}, {hex(n_bits)}, 1, 50 * COIN);')
-print(f'consensus.hashGenesisBlock = genesis.GetHash();')
-print(f'assert(consensus.hashGenesisBlock == uint256S("{hash_hex}"));')
-print(f'assert(genesis.hashMerkleRoot == uint256S("{merkle_hex}"));')
-print(f'bech32_hrp = "{bech32_prefix}";')
+print('// Genesis block parameters for ZiaCoin')
+print(f'const char* genesis_msg = "{psz_timestamp}";')
+print(f'const CScript genesis_script = CScript() << ParseHex("{pubkey}") << OP_CHECKSIG;')
 print()
-print('// Base58 prefixes')
-print('base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1, 65); // addresses start with Z')
-print('base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1, 125);')
-print('base58Prefixes[SECRET_KEY]     = std::vector<unsigned char>(1, 212);')
+print('CBlock genesis = CreateGenesisBlock(')
+print(f'    genesis_msg,')
+print(f'    genesis_script,')
+print(f'    {n_time},    // Timestamp: {datetime.fromtimestamp(n_time).strftime("%Y-%m-%d")}')
+print(f'    {genesis_nonce},   // Nonce')
+print(f'    {hex(n_bits)}, // nBits')
+print(f'    1,          // nVersion')
+print(f'    50 * COIN   // genesisReward')
+print(');')
+print()
+print(f'consensus.hashGenesisBlock = genesis.GetHash();')
+print(f'assert(consensus.hashGenesisBlock == uint256{{"{hash_hex}"}});')
+print(f'assert(genesis.hashMerkleRoot == uint256{{"{merkle_hex}"}});')
+print(f'bech32_hrp = "{bech32_prefix}";')
 print()
 
 print("=== Default Ports for chainparamsbase.cpp ===")
@@ -205,10 +180,21 @@ for net, port in default_ports.items():
 # ======== Save to file ========
 with open("zia_genesis_output.txt", "w") as f:
     f.write("// ZiaCoin Genesis C++ Configuration\n")
-    f.write(f'genesis = CreateGenesisBlock("{psz_timestamp}", {n_time}, {genesis_nonce}, {hex(n_bits)}, 1, 50 * COIN);\n')
+    f.write('// Genesis block parameters for ZiaCoin\n')
+    f.write(f'const char* genesis_msg = "{psz_timestamp}";\n')
+    f.write(f'const CScript genesis_script = CScript() << ParseHex("{pubkey}") << OP_CHECKSIG;\n\n')
+    f.write('CBlock genesis = CreateGenesisBlock(\n')
+    f.write(f'    genesis_msg,\n')
+    f.write(f'    genesis_script,\n')
+    f.write(f'    {n_time},    // Timestamp: {datetime.fromtimestamp(n_time).strftime("%Y-%m-%d")}\n')
+    f.write(f'    {genesis_nonce},   // Nonce\n')
+    f.write(f'    {hex(n_bits)}, // nBits\n')
+    f.write(f'    1,          // nVersion\n')
+    f.write(f'    50 * COIN   // genesisReward\n')
+    f.write(');\n\n')
     f.write(f'consensus.hashGenesisBlock = genesis.GetHash();\n')
-    f.write(f'assert(consensus.hashGenesisBlock == uint256S("{hash_hex}"));\n')
-    f.write(f'assert(genesis.hashMerkleRoot == uint256S("{merkle_hex}"));\n')
+    f.write(f'assert(consensus.hashGenesisBlock == uint256{{"{hash_hex}"}});\n')
+    f.write(f'assert(genesis.hashMerkleRoot == uint256{{"{merkle_hex}"}});\n')
     f.write(f'bech32_hrp = "{bech32_prefix}";\n\n')
     f.write("// Base58 prefixes\n")
     f.write('base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1, 65);\n')
@@ -280,7 +266,6 @@ def uint256_from_compact(c):
 
 def generate_genesis_block(pszTimestamp, pubkey, nTime, nNonce, nBits, nVersion, genesisReward):
     merkleRoot = hashlib.sha256(hashlib.sha256(pszTimestamp).digest()).digest()
-    merkleRoot = merkleRoot[::-1]  # Reverse for little-endian
     
     # Genesis block header
     blockHeader = struct.pack("<I", nVersion)
@@ -292,7 +277,6 @@ def generate_genesis_block(pszTimestamp, pubkey, nTime, nNonce, nBits, nVersion,
     
     # Calculate block hash
     blockHash = hashlib.sha256(hashlib.sha256(blockHeader).digest()).digest()
-    blockHash = blockHash[::-1]  # Reverse for little-endian
     
     return {
         'hash': binascii.hexlify(blockHash).decode('utf-8'),
@@ -339,7 +323,7 @@ def main():
     const char* genesis_msg = "{pszTimestamp}";
     const CScript genesis_script = CScript() << ParseHex("{pubkey}") << OP_CHECKSIG;
     
-    genesis = CreateGenesisBlock(genesis_msg,
+    CBlock genesis = CreateGenesisBlock(genesis_msg,
             genesis_script,
             {nTime},    // Timestamp
             {nNonce},   // Nonce
@@ -351,57 +335,6 @@ def main():
     assert(consensus.hashGenesisBlock == uint256{{"{result['hash']}"}});
     assert(genesis.hashMerkleRoot == uint256{{"{result['merkle_root']}"}});
     """)
-
-    # Update chainparams.cpp
-    update_chainparams_cpp()
-
-def update_chainparams_cpp():
-    # Read the file
-    with open("src/kernel/chainparams.cpp", "r") as f:
-        lines = f.readlines()
-
-    # Prepare new lines for the genesis block section
-    new_lines = []
-    replaced = False
-    for line in lines:
-        # Replace genesis block creation
-        if re.search(r'genesis = CreateGenesisBlock\(', line):
-            new_lines.append(f'        genesis = CreateGenesisBlock("{psz_timestamp}", {n_time}, {genesis_nonce}, {hex(n_bits)}, 1, 50 * COIN);\n')
-            replaced = True
-            continue
-        # Replace hashGenesisBlock assertion
-        if re.search(r'assert\(consensus\.hashGenesisBlock == uint256', line):
-            new_lines.append(f'        assert(consensus.hashGenesisBlock == uint256{{"{hash_hex}"}});\n')
-            replaced = True
-            continue
-        # Replace merkle root assertion
-        if re.search(r'assert\(genesis\.hashMerkleRoot == uint256', line):
-            new_lines.append(f'        assert(genesis.hashMerkleRoot == uint256{{"{merkle_hex}"}});\n')
-            replaced = True
-            continue
-        # Replace base58 prefixes
-        if re.search(r'base58Prefixes\[PUBKEY_ADDRESS\]', line):
-            new_lines.append('        base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1, 65);\n')
-            replaced = True
-            continue
-        if re.search(r'base58Prefixes\[SCRIPT_ADDRESS\]', line):
-            new_lines.append('        base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1, 125);\n')
-            replaced = True
-            continue
-        if re.search(r'base58Prefixes\[SECRET_KEY\]', line):
-            new_lines.append('        base58Prefixes[SECRET_KEY]     = std::vector<unsigned char>(1, 212);\n')
-            replaced = True
-            continue
-        # Otherwise, keep the line
-        new_lines.append(line)
-
-    # Write back if any replacements were made
-    if replaced:
-        with open("src/kernel/chainparams.cpp", "w") as f:
-            f.writelines(new_lines)
-        print(f"✅ Updated src/kernel/chainparams.cpp with new genesis block parameters.")
-    else:
-        print("⚠️ No genesis block section found to update in chainparams.cpp.")
 
 if __name__ == '__main__':
     main()

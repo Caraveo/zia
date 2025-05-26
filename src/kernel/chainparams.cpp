@@ -126,15 +126,26 @@ public:
         const char* genesis_msg = "The beginning of ZiaCoin - 2025-05-24";
         const CScript genesis_script = CScript() << ParseHex("04a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b0") << OP_CHECKSIG;
         
-        CBlock genesis = CreateGenesisBlock(
-            genesis_msg,
-            genesis_script,
-            1748190366,    // Timestamp: 2025-05-24
-            16389,         // Nonce
-            0x207fffff,    // nBits
-            1,             // nVersion
-            50 * COIN      // genesisReward
-        );
+        // Build scriptSig to match genesis.py
+        std::vector<unsigned char> scriptSigVec(genesis_msg, genesis_msg + strlen(genesis_msg));
+        CScript scriptSig = CScript() << scriptSigVec;
+        
+        CMutableTransaction txNew;
+        txNew.version = 1;
+        txNew.vin.resize(1);
+        txNew.vout.resize(1);
+        txNew.vin[0].scriptSig = scriptSig;
+        txNew.vout[0].nValue = 50 * COIN;
+        txNew.vout[0].scriptPubKey = genesis_script;
+        
+        CBlock genesis;
+        genesis.nTime    = 1748190366;  // Timestamp: 2025-05-24
+        genesis.nBits    = 0x207fffff;  // nBits
+        genesis.nNonce   = 16389;       // Nonce
+        genesis.nVersion = 1;           // nVersion
+        genesis.vtx.push_back(MakeTransactionRef(std::move(txNew)));
+        genesis.hashPrevBlock.SetNull();
+        genesis.hashMerkleRoot = BlockMerkleRoot(genesis);
         
         consensus.hashGenesisBlock = genesis.GetHash();
         

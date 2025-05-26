@@ -78,6 +78,7 @@
         "iterator": "cpp",
         "type_traits": "cpp",
         "utility": "cpp",
-        "ostream": "cpp"
+        "ostream": "cpp",
+        "cassert": "cpp"
     }
 }

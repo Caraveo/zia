@@ -7,8 +7,12 @@ NC='\033[0m'
 echo -e "🧹 Cleaning old build files..."
 rm -rf build
 
-echo -e "🧬 Running genesis.py script..."
-python3 genesis.py
+if [[ "${1:-}" == "--regen-genesis" ]]; then
+  echo -e "🧬 Regenerating genesis block (DEV MODE)..."
+  python3 genesis.py
+else
+  echo -e "🧬 Skipping genesis block generation (already hardcoded)."
+fi
 
 echo -e "⚙️ Configuring build with CMake..."
 cmake -B build \
