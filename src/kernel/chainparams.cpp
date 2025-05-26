@@ -19,6 +19,7 @@
 #include <uint256.h>
 #include <util/chaintype.h>
 #include <util/strencodings.h>
+#include <util/convert.h>
 
 #include <algorithm>
 #include <cassert>
@@ -81,10 +82,10 @@ static bool LoadGenesisFromFile(CBlock& genesis, uint256& hashGenesisBlock, uint
     while (std::getline(file, line)) {
         if (line.find("hashGenesisBlock") != std::string::npos) {
             std::string hashStr = line.substr(line.find("uint256{") + 8, 64);
-            hashGenesisBlock = uint256S(hashStr);
+            hashGenesisBlock = uint256(ParseHex(hashStr));
         } else if (line.find("hashMerkleRoot") != std::string::npos) {
             std::string merkleStr = line.substr(line.find("uint256{") + 8, 64);
-            hashMerkleRoot = uint256S(merkleStr);
+            hashMerkleRoot = uint256(ParseHex(merkleStr));
         } else if (line.find("nTime") != std::string::npos) {
             std::string timeStr = line.substr(line.find("=") + 1);
             nTime = std::stoul(timeStr);
